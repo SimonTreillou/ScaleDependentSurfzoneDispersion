@@ -1,0 +1,54 @@
+#!/bin/bash
+#SBATCH -J R3_MRSWTRC_1
+#SBATCH --partition=serc
+#SBATCH -o R3_MRSWTRC_1-%j.out
+#SBATCH -e R3_MRSWTRC_1-%j.err
+#SBATCH --time=48:00:00
+#SBATCH --nodes=5
+#SBATCH --ntasks=120
+#SBATCH --ntasks-per-node=24
+#SBATCH --ntasks-per-core=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem-per-cpu=2G
+#SBATCH --constraint="CLASS:SH3_CBASE|CLASS:SH4_CPERF|CLASS:SH4_CBASE"
+#SBATCH --mail-user=treillou@stanford.edu
+#SBATCH --mail-type=ALL
+
+module purge
+module load gcc openmpi netcdf hdf5 netcdf-c netcdf-fortran
+
+export croco=/home/groups/bakercm/CROCO/croco
+export configs=/home/users/treillou/Configs
+homedir=$SLURM_SUBMIT_DIR
+workdir=$SCRATCH/CLARK_PROD/R3_MR_spinup
+
+count=1
+while [ -d "$workdir" ]; do
+  echo "Directory $workdir already exists."
+  count=$((count + 1))
+  workdir="$SCRATCH/CLARK_PROD/R3_MRSW_spinup_$count"
+done
+
+if [ ! -d "$SCRATCH/CLARK_PROD" ]; then
+  mkdir $SCRATCH/CLARK_PROD
+fi
+mkdir $workdir
+echo "$SLURM_JOB_ID" > $workdir/jobid
+
+cp croco*    $workdir
+cp *.nc      $workdir
+cp *.h       $workdir
+cp job*      $workdir
+cp *.F       $workdir
+cp *.in      $workdir
+cp *.txt     $workdir
+mv ./Compile $workdir
+rm namelist_* ncjoin partit kRGB*
+rm -r MUSTANG_NAMELIST
+mv ./Compile $workdir
+cd $workdir
+
+echo "Launching CROCO..."
+mpirun -np 120 ./croco croco.in > croco.out
+echo "... CROCO done"
+cp croco.out $homedir

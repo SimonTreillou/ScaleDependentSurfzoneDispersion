@@ -1,0 +1,2291 @@
+
+
+
+
+
+
+
+
+
+
+
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+
+
+
+
+
+
+
+! PROCESSES:
+
+! MR only (no longshore current)
+! TRC+ (no longshore current)
+! +SW (longshore current)
+! TRC++SW (longshore current)
+
+! Point source release if active, longshore uniform else
+
+
+
+
+
+!# define BSTRESS_FAST
+! Common bathymetry:
+!# define CLARK 
+! Case specific bathymetry
+
+
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA,
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+!
+
+
+
+
+
+
+
+!-# define float dfloat
+!-# define FLoaT dfloat
+!-# define FLOAT dfloat
+!-# define sqrt dsqrt
+!-# define SQRT dsqrt
+!-# define exp dexp
+!-# define EXP dexp
+!-# define dtanh dtanh
+!-# define TANH dtanh
+
+
+
+
+
+
+
+
+       subroutine init_sta
+!
+!====================================================================
+!                                                                    !
+!  This routine reads in and process station locations from          !
+!  input station script.                                             !
+!                                                                    !
+!=====================================================================
+!
+      implicit none
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+!----------------------------------------------------------------------
+! Dimensions of Physical Grid and array dimensions
+!----------------------------------------------------------------------
+!
+! LLm,MMm  Number of the internal points of the PHYSICAL grid.
+!          in the XI- and ETA-directions [physical side boundary
+!          points and peroodic ghost points (if any) are excluded].
+!
+! Lm,Mm    Number of the internal points [see above] of array
+!          covering a Message Passing subdomain. In the case when
+!          no Message Passing partitioning is used, these two are
+!          the same as LLm,MMm.
+!
+! N        Number of vertical levels.
+!
+      integer  LLm,Lm,MMm,Mm,N, LLm0,MMm0
+!      parameter (LLm0=340,  MMm0=831,  N=10)   !  1.5 m Clark
+!      parameter (LLm0=600, MMm0=2000, N=10) ! .5 m Clark
+      parameter (LLm0=300, MMm0=1000, N=10) ! 1 m Clark
+!      parameter (LLm0=150, MMm0=500, N=8) ! 2 m Clark
+
+      parameter (LLm=LLm0,  MMm=MMm0)
+
+!
+!----------------------------------------------------------------------
+! Number of layers in Sediment (SL)
+!----------------------------------------------------------------------
+!
+      integer N_sl
+      !parameter (N_sl=40)
+      parameter (N_sl=0)
+
+!
+!----------------------------------------------------------------------
+!  related variables
+!----------------------------------------------------------------------
+!
+      integer Lmmpi,Mmmpi,iminmpi,imaxmpi,jminmpi,jmaxmpi
+      common /comm_setup_mpi1/ Lmmpi,Mmmpi
+      common /comm_setup_mpi2/ iminmpi,imaxmpi,jminmpi,jmaxmpi
+!
+! Domain subdivision parameters
+! ====== =========== ==========
+!
+! NPP            Maximum allowed number of parallel threads;
+! NSUB_X,NSUB_E  Number of SHARED memory subdomains in XI- and
+!                                                ETA-directions;
+! NNODES        Total number of  processes (nodes);
+! NP_XI,NP_ETA  Number of  subdomains in XI- and ETA-directions;
+!
+      integer NSUB_X, NSUB_E, NPP
+      integer NP_XI, NP_ETA, NNODES
+!      parameter (NP_XI=14,  NP_ETA=40,  NNODES=NP_XI*NP_ETA) ! .5m resolution
+      parameter (NP_XI=6,  NP_ETA=20,  NNODES=NP_XI*NP_ETA) ! 1 m Clark
+!      parameter (NP_XI=7,  NP_ETA=20,  NNODES=NP_XI*NP_ETA) ! 2 m Clark
+      parameter (NPP=1)
+      parameter (NSUB_X=1, NSUB_E=1)
+
+!
+!----------------------------------------------------------------------
+! Number maximum of weights for the barotropic mode
+!----------------------------------------------------------------------
+!
+      integer NWEIGHT
+      parameter (NWEIGHT=1000)
+
+!
+!----------------------------------------------------------------------
+! Tides
+!----------------------------------------------------------------------
+!
+!
+!----------------------------------------------------------------------
+! Wetting-Drying
+!----------------------------------------------------------------------
+!
+      real D_wetdry             ! Critical Depth for Drying cells
+                                ! ======== ===== === ====== =====
+      parameter (D_wetdry=0.05)
+!
+!----------------------------------------------------------------------
+! Minimum water depth above which wave forcing is applied
+! (D_wavedry>D_wetdry if  is activated)
+!----------------------------------------------------------------------
+!
+!----------------------------------------------------------------------
+! Point sources, Floast, Stations
+!----------------------------------------------------------------------
+!
+       integer NS                ! Number of output stations
+       parameter (NS=5)          ! ====== == ====== ========
+       integer Msta              ! Maximum number of stations
+       parameter (Msta=1000)     ! ======= ====== == ========
+
+!
+!----------------------------------------------------------------------
+! Derived dimension parameters
+!----------------------------------------------------------------------
+!
+      integer stdout, Np, NpHz, padd_X,padd_E
+      parameter (stdout=6)
+      parameter (Np=N+1)
+      parameter (NpHz=(N+1+N_sl))
+      parameter (Lm=(LLm+NP_XI-1)/NP_XI, Mm=(MMm+NP_ETA-1)/NP_ETA)
+      parameter (padd_X=(Lm+2)/2-(Lm+1)/2)
+      parameter (padd_E=(Mm+2)/2-(Mm+1)/2)
+
+      integer NSA, N2d,N3d,N3dHz, size_XI,size_ETA
+      integer se,sse, sz,ssz
+      parameter (NSA=35)
+      parameter (size_XI=7+(Lm+NSUB_X-1)/NSUB_X)
+      parameter (size_ETA=7+(Mm+NSUB_E-1)/NSUB_E)
+      parameter (sse=size_ETA/Np, ssz=Np/size_ETA)
+      parameter (se=sse/(sse+ssz), sz=1-se)
+      parameter (N2d=size_XI*(se*size_ETA+sz*Np))
+      parameter (N3d=size_XI*size_ETA*Np)
+      parameter (N3dHz=size_XI*size_ETA*NpHz)
+
+!
+!----------------------------------------------------------------------
+! I/O : flag for type sigma vertical transformation
+!----------------------------------------------------------------------
+!
+      real Vtransform
+      parameter (Vtransform=2)
+
+!
+!----------------------------------------------------------------------
+! Number of tracers
+!----------------------------------------------------------------------
+!
+      integer   NT, NTA, itemp, NTot
+      integer   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
+      integer   ntrc_subs, ntrc_substot
+      integer   ntrc_mld
+!
+      parameter (itemp=0)
+      parameter (ntrc_temp=0)
+      parameter (ntrc_salt=0)
+      parameter (ntrc_mld=0)
+      parameter (ntrc_pas=0)
+      parameter (ntrc_bio=0)
+
+
+!
+      parameter (ntrc_subs=0, ntrc_substot=0)
+
+!
+      parameter (ntrc_sed=0)
+!
+! Total number of active tracers
+!
+      parameter (NTA=itemp+ntrc_salt)
+
+!
+! Total number of tracers
+!
+      parameter (NT=itemp+ntrc_salt+ntrc_pas+ntrc_bio+ntrc_sed+ntrc_mld)
+      parameter (NTot=NT)
+
+
+
+      integer NGLS
+      parameter(NGLS=2)
+      integer itke
+      parameter(itke=1)
+      integer igls
+      parameter(igls=2)
+
+
+!
+!----------------------------------------------------------------------
+! Tracer identification indices
+!----------------------------------------------------------------------
+!
+      integer   ntrc_diats, ntrc_diauv, ntrc_diabio
+      integer   ntrc_diavrt, ntrc_diaek, ntrc_diapv
+      integer   ntrc_diaeddy, ntrc_surf
+!
+
+
+!
+! ================  Parameters  =====================
+!
+
+
+!
+! ===  BIOLOGY  ===
+!
+      parameter (ntrc_diabio=0)
+
+!
+! === SEDIMENTS ===
+!
+
+
+!
+! ===  u,v and tracer equations Diagnostics  ===
+!
+      parameter (ntrc_diats=0)
+      parameter (ntrc_diauv=0)
+      parameter (ntrc_diavrt=0)
+      parameter (ntrc_diaek=0)
+      parameter (ntrc_diapv=0)
+      parameter (ntrc_diaeddy=15)
+      parameter (ntrc_surf=0)
+
+!
+!----------------------------------------------------------------------
+! Max time increment for computing bottom stress at the 3D fast time
+! steps
+!----------------------------------------------------------------------
+!
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+! This is include file "grid.h": Environmental two-dimensional
+! arrays associated with curvilinear horizontal coordinate system.
+!
+! h       Model topography (bottom depth [m] at RHO-points.)
+! dh      Topograhy increment in case of moving bathymetry
+! f       Coriolis parameter [1/s].
+! fomn    Compound term, f/[pm*pn] at RHO points.
+!
+! angler  Angle [radians] between XI-axis and the direction
+!             to the EAST at RHO-points.
+!
+! latr    Latitude (degrees_north) at RHO-, U-, and V-points.
+! latu
+! latv
+! lonr    Longitude (degrees_east) at RHO-, U-, and V-points.
+! lonu
+! lonv
+!
+! xp      XI-coordinates [m] at PSI-points.
+! xr      XI-coordinates (m] at RHO-points.
+! yp      ETA-coordinates [m] at PSI-points.
+! yr      ETA-coordinates [m] at RHO-points.
+!
+! pm      Coordinate transformation metric "m" [1/meters]
+!              associated with the differential distances in XI.
+! pn      Coordinate transformation metric "n" [1/meters]
+!               associated with the differential distances in ETA.
+! om_u    Grid spacing [meters] in the XI -direction at U-points.
+! om_v    Grid spacing [meters] in the XI -direction at V-points.
+! on_u    Grid spacing [meters] in the ETA-direction at U-points.
+! on_v    Grid spacing [meters] in the ETA-direction at V-points.
+!
+! dmde    ETA-derivative of inverse metric factor "m", d(1/M)/d(ETA).
+! dndx     XI-derivative  of inverse metric factor "n", d(1/N)/d(XI).
+!
+! pmon_p  Compound term, pm/pn at PSI-points.
+! pmon_r  Compound term, pm/pn at RHO-points.
+! pmon_u  Compound term, pm/pn at U-points.
+! pnom_p  Compound term, pn/pm at PSI-points.
+! pnom_r  Compound term, pn/pm at RHO-points.
+! pnom_v  Compound term, pn/pm at V-points.
+!
+! rmask   Land-sea masking arrays at RHO-,U-,V- and PSI-points.
+! umask   (rmask,umask,vmask) = (0=Land, 1=Sea);
+! vmask
+! pmask    pmask=(0=Land, 1=Sea, 1-gamma2 =boundary).
+!
+! reducu  reduction coefficient along x-axis for rivers sections
+! reducv  reduction coefficient along y-axis for rivers sections
+
+      real h(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real hinv(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real f(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real fomn(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      common /grid_h/h /grid_hinv/hinv /grid_f/f /grid_fomn/fomn
+
+
+      real xp(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real xr(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real yp(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real yr(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      common /grid_xr/xr /grid_xp/xp /grid_yp/yp /grid_yr/yr
+
+      real pm(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real pn(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real om_r(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real on_r(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real om_u(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real on_u(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real om_v(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real on_v(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real om_p(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real on_p(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real pn_u(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real pm_v(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real pm_u(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real pn_v(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      common /metrics_pm/pm    /metrics_pn/pn
+      common /metrics_omr/om_r /metrics_on_r/on_r
+      common /metrics_omu/om_u /metrics_on_u/on_u
+      common /metrics_omv/om_v /metrics_on_v/on_v
+      common /metrics_omp/om_p /metrics_on_p/on_p
+      common /metrics_pnu/pn_u /metrics_pmv/pm_v
+      common /metrics_pmu/pm_u /metrics_pnv/pn_v
+
+
+      real pmon_p(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real pmon_r(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real pmon_u(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real pnom_p(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real pnom_r(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real pnom_v(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real grdscl(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      common /metrics_pmon_p/pmon_p /metrics_pnom_p/pnom_p
+      common /metrics_pmon_r/pmon_r /metrics_pnom_r/pnom_r
+      common /metrics_pmon_u/pmon_u /metrics_pnom_v/pnom_v
+      common /metrics_grdscl/grdscl
+
+
+      real rmask_wet(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real pmask_wet(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real umask_wet(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real vmask_wet(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real rmask_wet_avg(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real Dcrit(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      real wetdry(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      common /mask_r_wet/rmask_wet /mask_p_wet/pmask_wet
+      common /mask_u_wet/umask_wet /mask_v_wet/vmask_wet
+      common /mask_r_wet_avg/rmask_wet_avg
+      common /Dcrit_wet/Dcrit
+      common /wetdry_wet/wetdry
+
+
+      real zob(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+      common /Z0B_VAR/zob
+
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+
+      real u(-2:Lm+3+padd_X,-2:Mm+3+padd_E,N,3)
+      real v(-2:Lm+3+padd_X,-2:Mm+3+padd_E,N,3)
+      real t(-2:Lm+3+padd_X,-2:Mm+3+padd_E,N,3,NT)
+      common /ocean_u/u /ocean_v/v /ocean_t/t
+
+      real Hz(-2:Lm+3+padd_X,-2:Mm+3+padd_E,N)
+      real Hz_bak(-2:Lm+3+padd_X,-2:Mm+3+padd_E,N)
+      real z_r(-2:Lm+3+padd_X,-2:Mm+3+padd_E,N)
+      real z_w(-2:Lm+3+padd_X,-2:Mm+3+padd_E,0:N)
+      real Huon(-2:Lm+3+padd_X,-2:Mm+3+padd_E,N)
+      real Hvom(-2:Lm+3+padd_X,-2:Mm+3+padd_E,N)
+      common /grid_Hz_bak/Hz_bak /grid_zw/z_w /grid_Huon/Huon
+      common /grid_Hvom/Hvom
+
+      real We(-2:Lm+3+padd_X,-2:Mm+3+padd_E,0:N)
+      common /grid_Hz/Hz /grid_zr/z_r /grid_We/We
+
+      real wz(-2:Lm+3+padd_X,-2:Mm+3+padd_E,0:N,3)
+      common /ocean_wz/wz
+      real Hzr(-2:Lm+3+padd_X,-2:Mm+3+padd_E,N)
+      common /grid_Hzr/Hzr
+
+
+      real rho1(-2:Lm+3+padd_X,-2:Mm+3+padd_E,N)
+      real rho(-2:Lm+3+padd_X,-2:Mm+3+padd_E,N)
+      common /ocean_rho1/rho1 /ocean_rho/rho
+
+
+
+
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+! This is include file "nc_sta.h".
+! ==== == ======= ==== ============
+!
+! stafield     Number of station fields for output
+! wrtsta       Logical vector with flags for output
+! indxsta[...] Index of logical flag to output several fields
+!       Grd  - grid level
+!       Temp - temp
+!       Salt - Salt
+!       Rho  - Density
+!       Vel  - u and v components
+! ncidsta      id of station output file
+! nrecsta      step to output station data
+! sta[...]     several reference names of netcdf output
+! staname      station output filename
+! staposname   station input data filename
+
+      integer stafield
+!======================================================================
+! Simon Treillou, 02/2026 - add tracer concentration and vorticity to station
+      parameter(stafield=6)
+
+      integer indxstaGrd, indxstaTemp, indxstaSalt,
+     &        indxstaRho, indxstaVel, indxstaVrt
+      parameter (     indxstaGrd=1, indxstaTemp=2,
+     &                indxstaSalt=3, indxstaRho=4,  indxstaVel=5,
+     &                indxstaVrt=6)
+!======================================================================
+
+
+      integer ncidsta,    nrecsta,    staGlevel
+     &      , staTstep,   staTime,    staXgrd,   staYgrd
+     &      , staZgrd,    staZeta,    staU,      staV
+!======================================================================
+! Simon Treillou, 02/2026 - add vorticity to station
+     &      , staVrt
+!======================================================================
+     &      , staX,       staY
+     &      , staDepth,   staDen
+!======================================================================
+! Simon Treillou, 02/2026 - add tracer concentration to station
+!======================================================================
+      logical wrtsta(stafield)
+
+      common/incscrum_sta/
+     &        ncidsta,    nrecsta,    staGlevel
+     &      , staTstep,   staTime,    staXgrd,   staYgrd
+     &      , staZgrd,    staZeta,    staU,      staV
+!======================================================================
+! Simon Treillou, 02/2026 - add vorticity to station
+     &      , staVrt
+!======================================================================
+     &      , staX,       staY
+     &      , staDepth,   staDen
+!======================================================================
+! Simon Treillou, 02/2026 - add tracer concentration to station
+!======================================================================
+
+     &      , wrtsta
+
+
+      character*80  staname,   staposname
+      common /cncscrum_sta/ staname,   staposname
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+!  Include file "sta.h".
+!  =====================
+! NSTVARS    Number of stations variables.
+! stainfo    Station initial information.
+! istagrd    Index for station grid (embedding) location
+! istastr    Index for station recording start time.
+! istaxgrd   Index for station x-grid location.
+! istaygrd   Index for station y-grid location.
+! istazgrd   Index for station z-grid location.
+! istalat    Index for station latitude location.
+! istalon    Index for station longitude location.
+! istadpt    Index for station depth.
+! istaz      Index for station sea level
+! istatem    Index for station potential temperature.
+! istasal    Index for station salinity.
+! istaden    Index for station density anomaly.
+! istau      Index for station u-component velocity.
+! istav      Index for station v-component velocity.
+! nstas      Number of stations.
+! stagrd     Station/grid embedding correspondance array.
+! stainfo    Station data at input.
+! stadata    Station variables data collected for output
+! staSigm    Station data at all sigma levels
+! diagsta    Flag taht determines if it is time step station
+
+      integer NSTAVARS,
+     &        istagrd,           istatstr,
+     &        istaxgrd,          istaygrd,        istazgrd,
+     &        istalon,           istalat,         istadpt,
+     &        istatem,           istasal,         istaden,
+     &        istau,             istav,           istaz,
+     &        istavrt
+!======================================================================
+! Simon Treillou, 02/2026 - add tracer concentration and vorticity to station
+
+
+      parameter (NSTAVARS=12,
+     &        istagrd=-1,        istatstr=0,
+     &        istaxgrd=1,        istaygrd=2,      istazgrd=3,
+     &        istalon=4,         istalat=5,       istadpt=6,
+     &        istatem=7,         istasal=8,       istaden=9,
+     &        istau=10,          istav=11,        istaz=12,
+     &        istavrt=13
+!======================================================================
+! Simon Treillou, 02/2026 - add tracer concentration to station
+     &        )
+!======================================================================
+
+!======================================================================
+
+      logical diagsta
+      integer nstas0,nstas, stagrd(Msta)
+      common /stan/ nstas0,nstas, diagsta
+
+      real stainfo(istagrd:istazgrd,Msta)
+      common /sta_info/ stainfo
+
+      real staspval, stadeltap2c
+      common /sta_scalars/ staspval, stadeltap2c
+
+!======================================================================
+! Simon Treillou, 02/2026 - add tracer concentration to station
+      real stadata(1:NSTAVARS,Msta), staSigm(istadpt:istav,Msta,N)
+!======================================================================
+      common /sta_data/ stadata, staSigm
+
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+! This is include file "scalars.h"
+!---------------------------------
+!
+!  The following common block contains time variables and indices
+! for 2D (k-indices) and 3D (n-indices) computational engines. Since
+! they are changed together, they are placed into the same cache line
+! despite their mixed type, so that only one cachene is being
+! invalidated and has to be propagated accross the cluster.
+!
+! Note that the real values are placed first into the common block
+! before the integer variables. This is done to prevent the
+! possibility of misallignment of the 8-byte objects in the case
+! when an uneven number of 4-byte integers is placed before a 8-byte
+! real (in the case when default real size is set to 8bytes).
+! Thought misallignment is not formally a violation of fortran
+! standard, it may cause performance degradation and/or make compiler
+! issue a warning message (Sun, DEC Alpha) or even crash (Alpha).
+!
+! time        Time since initialization [seconds];
+! time_start  Initialization time [seconds];
+! tdays       Time since initialization [days];
+! dt          Time step for 3D primitive equations [seconds];
+! dtfast      Time step for 2D (barotropic) mode [seconds];
+!
+      real dt, dtfast, time, time2, time_start, tdays, start_time
+      integer ndtfast, iic, kstp, krhs, knew, next_kstp
+     &      , iif, nstp, nrhs, nnew, nbstep3d
+
+      logical PREDICTOR_2D_STEP
+      common /time_indices/  dt,dtfast, time, time2,time_start, tdays,
+     &     ndtfast, iic, kstp, krhs, knew, next_kstp,
+     &     start_time,
+     &                       iif, nstp, nrhs, nnew, nbstep3d,
+
+     &                       PREDICTOR_2D_STEP
+
+!
+! Slowly changing variables: these are typically set in the beginning
+! of the run and either remain unchanged, or are changing only in
+! association with the I/0.
+!
+! xl, el   Physical size (m) of domain box in the XI-,ETA-directions.
+!
+! Tcline   Width (m) of surface or bottom boundary layer in which
+!          higher vertical resolution is required during stretching.
+! theta_s  S-coordinate surface control parameter, [0<theta_s<20].
+! theta_b  S-coordinate bottom control parameter, [0<theta_b<1].
+! hc       S-coordinate parameter, hc=min(hmin,Tcline).
+!
+! sc_r     S-coordinate independent variable, [-1 < sc < 0] at
+!             vertical RHO-points
+! sc_w     S-coordinate independent variable, [-1 < sc < 0] at
+!             vertical W-points.
+! Cs_r     Set of S-curves used to stretch the vertical coordinate
+!             lines that follow the topography at vertical RHO-points.
+! Cs_w     Set of S-curves used to stretch the vertical coordinate
+!             lines that follow the topography at vertical W-points.
+!
+! rho0     Boussinesque Approximation Mean density [kg/m^3].
+! R0       Background constant density anomaly [kg/m^3] used in
+!                                      linear equation of state.
+! T0,S0    Background temperature (Celsius) and salinity [PSU]
+!                          values used in analytical fields;
+! Tcoef    Thermal expansion coefficient in linear EOS;
+! Scoef    Saline contraction coefficient in linear EOS;
+!
+! rdrg     Linear bottom drag coefficient.
+! rdrg2    Quadratic bottom drag coefficient.
+! Cdb_max  Maximum bottom drag coefficient allowed.
+! Cdb_min  Minimum bottom drag coefficient to avoid the
+!                law-of-the-wall to extend indefinitely.
+! Zobt      Bottom roughness (m).
+!
+! gamma2   Slipperiness parameter, either 1. (free-slip)
+!
+! ntstart  Starting timestep in evolving the 3D primitive equations;
+!                              usually 1, if not a restart run.
+! ntimes   Number of timesteps for the 3D primitive equations in
+!                                                    the current run.
+! ndtfast  Number of timesteps for 2-D equations between each "dt".
+!
+! nrst     Number of timesteps between storage of restart fields.
+! nwrt     Number of timesteps between writing of fields into
+!                                                     history file.
+! ninfo    Number of timesteps between print of single line
+!                                   information to standard output.
+! nsta     Number of timesteps between storage of station data.
+! navg     Number of timesteps between storage of time-averaged
+!                                                           fields.
+! ntsavg   Starting timestep for accumulation of output time-
+!                                                 averaged fields.
+! nrrec    Counter of restart time records to read from disk,
+!                   the last is used as the initial conditions.
+!
+! ldefhis  Logical switch used to create the history file.
+!             If TRUE, a new history file is created. If FALSE,
+!             data is appended to an existing history file.
+! levsfrc  Deepest level to apply surface momentum stress as
+!                                                 bodyforce.
+! levbfrc  Shallowest level to apply bottom momentum stress as
+!                                                 bodyforce.
+! got_tini Logical switch used at initialisation
+!              If TRUE, the tracer is present in the initial file
+!              If FALSE, the tracer needs an analytical value
+!
+! got_inised Logical switch used at initialisation  of sediments
+!              If TRUE, the sediment var. is in the initial file
+!              If FALSE, the sed. var. gets analytical value from file
+!
+! got_inibed Logical switch used at initialisation of ripple height, length
+!              If TRUE, the ripple var. is in the initial file
+!              If FALSE, the ripple var. is obtained from file (ifdef also SEDIMENT)
+!                        the ripple var. is set in ana_bsedim (ifndef SEDIMENT)
+!
+      real time_avg, time2_avg, rho0
+     &               , rdrg, rdrg2, Cdb_min, Cdb_max, Zobt
+     &               , xl, el, visc2, visc4, gamma2
+      real  theta_s,   theta_b,   Tcline,  hc
+      real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
+      real  rx0, rx1
+      real R0,T0,S0, Tcoef, Scoef
+      real weight(6,0:NWEIGHT)
+
+      real  x_sponge,   v_sponge
+       real  tauT_in, tauT_out, tauM_in, tauM_out
+      integer numthreads,     ntstart,   ntimes,  ninfo
+     &      , nfast,  nrrec,     nrst,    nwrt
+     &                                 , ntsavg,  navg
+      integer nwrtdiags_eddy
+      integer ntsdiags_eddy_avg, nwrtdiags_eddy_avg
+      integer nsta, nrpfsta
+
+      logical ldefhis
+      logical ldefdiags_eddy
+      logical ldefdiags_eddy_avg
+      logical ldefsta
+
+      common /scalars_main/
+     &             time_avg, time2_avg,  rho0,      rdrg,    rdrg2
+     &           , Zobt,       Cdb_min,   Cdb_max
+     &           , xl, el,    visc2,     visc4,   gamma2
+     &           , theta_s,   theta_b,   Tcline,  hc
+     &           , sc_w,      Cs_w,      sc_r,    Cs_r
+     &           , rx0,       rx1
+     &                      , R0,T0,S0,  Tcoef,   Scoef
+     &                      , weight
+     &                      , x_sponge,   v_sponge
+     &                      , tauT_in, tauT_out, tauM_in, tauM_out
+     &      , numthreads,     ntstart,   ntimes,  ninfo
+     &      , nfast,  nrrec,     nrst,    nwrt
+     &                                 , ntsavg,  navg
+     &                      , nsta, nrpfsta
+     &                      , ldefdiags_eddy, nwrtdiags_eddy
+     &                      , ldefdiags_eddy_avg
+     &                      , nwrtdiags_eddy_avg
+     &                      , ntsdiags_eddy_avg
+     &                      , ldefsta
+     &                      , ldefhis
+
+      real Akv_bak
+      common /scalars_akv/ Akv_bak
+!
+!-----------------------------------------------------------------------
+! This following common block contains a set of globally accessable
+! variables in order to allow information exchange between parallel
+! threads working on different subdomains.
+!
+! Global summation variables are declared with 16 byte precision
+! to avoid accumulation of roundoff errors, since roundoff error
+! depends on the order of summation, which is undeterministic in
+! the case of summation between the parallel threads; not doing so
+! would make it impossible to pass an ETALON CHECK test if there is
+! a feedback of these sums into the dynamics of the model, such as
+! in the case when global mass conservation is enforced.
+!
+!  One sunny spring day, sometime in 1989 an american tourist, who
+! happened to be an attorney, was walking along a Moscow street.
+! Because it was the period of 'Perestroika' (which literally means
+! 'remodelling'), so that a lot of construction was going on in
+! Moscow, dozens of holes and trenches were open on the street. He
+! felt into one of them, broke his leg, ended up in a hospital and
+! complaining: In my country if a construction firm would not place
+! little red flags around the construction zone to warn passers-by
+! about the danger, I will sue em for their negligence! The doctor,
+! who was performing surgery on his leg replied to him: Did not you
+! see the one big red flag above the whole country in the first place?
+!
+! WARNING: FRAGILE ALIGNMENT SEQUENCE: In the following common block:
+! since real objects are grouped in pairs and integer*4 are grouped
+! in quartets, it is guaranteed that 16 Byte objects are aligned
+! in 16 Byte boundaries and 8 Byte objects are aligned in 8 Byte
+! boundaries. Removing or introduction of variables with violation
+! of parity, as well as changing the sequence of variables in the
+! common block may cause violation of alignment.
+!-----------------------------------------------------------------------
+!
+      logical synchro_flag
+      common /sync_flag/ synchro_flag
+
+      integer may_day_flag  ! This is a shared variable among nested grids
+      integer tile_count, first_time, bc_count
+      common /communicators_i/
+     &        may_day_flag, tile_count, first_time, bc_count
+
+      real hmin, hmax, grdmin, grdmax, Cu_min, Cu_max
+      common /communicators_r/
+     &     hmin, hmax, grdmin, grdmax, Cu_min, Cu_max
+
+
+      real*8 Cu_Adv3d,  Cu_W, Cu_Nbq_X, Cu_Nbq_Y, Cu_Nbq_Z
+      integer i_cx_max, j_cx_max, k_cx_max
+      common /diag_vars/ Cu_Adv3d,  Cu_W,
+     &        i_cx_max, j_cx_max, k_cx_max
+      real*8 volume, avgke, avgpe, avgkp, bc_crss
+
+     &        , avg_vol, avg_rho
+
+      common /communicators_rq/
+     &          volume, avgke, avgpe, avgkp, bc_crss
+     &        , avg_vol, avg_rho
+
+!
+!  related variables
+! === ====== =========
+!
+      logical EAST_INTER2, WEST_INTER2, NORTH_INTER2, SOUTH_INTER2
+      logical EAST_INTER, WEST_INTER, NORTH_INTER, SOUTH_INTER
+      logical CORNER_SW,CORNER_NW,CORNER_NE,CORNER_SE
+      integer mynode, mynode2, ii,jj, p_W,p_E,p_S,p_N, p_SW,p_SE,
+     & p_NW,p_NE,NNODES2
+      common /comm_setup/ mynode, mynode2, ii,jj, p_W,p_E,p_S,p_N,
+     & p_SW,p_SE, p_NW,p_NE, EAST_INTER, WEST_INTER, NORTH_INTER,
+     & SOUTH_INTER, EAST_INTER2, WEST_INTER2, NORTH_INTER2, SOUTH_INTER2,
+     & CORNER_SW,CORNER_NW,CORNER_NE,CORNER_SE,NNODES2
+
+
+!
+! Physical constants:
+! ======== ==========
+
+      real pi, deg2rad, rad2deg
+      parameter (pi=3.14159265358979323846, deg2rad=pi/180.,
+     &                                      rad2deg=180./pi)
+!
+! Earth radius [m]; Earth rotation [rad/s]; Acceleration of gravity [m/s^2];
+! duration of the day in seconds and its inverse; Julian offset day.
+
+      real Eradius, Erotation, g, day2sec,sec2day, jul_off,
+     &     year2day,day2year
+      parameter (Eradius=6371315.0,  Erotation=7.292115090e-5,
+     &           day2sec=86400., sec2day=1./86400.,
+     &           year2day=365.25, day2year=1./365.25,
+     &           jul_off=2440000.)
+!
+! Acceleration of gravity (nondimensional for Soliton problem)
+!
+      parameter (g=9.81)
+!
+!  Specific heat [Joules/kg/degC] for seawater, it is approximately
+!  4000, and varies only slightly (see Gill, 1982, Appendix 3).
+!
+      real Cp
+      parameter (Cp=3985.0)
+
+      real vonKar
+      parameter (vonKar=0.41)
+!
+!   FillValue (Needed if the FILLVAL key is defined)
+!   (See fillvalue.F subroutine)
+      real spval
+      parameter (spval=-999.0)
+      logical mask_val
+      parameter (mask_val = .true.)
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+! Include file "init_sta.h".
+! ==============================
+!
+! statitle         Stations application title.
+! stat0,stax0, ... input start time and positions from sta.in
+! stacoor          type of coordinates in input(lat,lon or x,y)a
+! STgrd            input grid level station in nested applications
+
+      real stat0(Msta), stax0(Msta), stay0(Msta), staz0(Msta)
+      common /ncrealsta/ stat0, stax0, stay0, staz0
+
+      integer  stacoor(Msta), STgrd(Msta)
+      common /ncintsta/ stacoor,STgrd
+
+! to be tested if STgrd is really necessary ALVARO
+
+      character*80 statitle
+      common /nccharsta/ statitle
+!
+      integer Ncount, i, icard, iunit, j, k, lstr, mc, nc
+      integer index(Msta)
+      integer lenstr
+      real xsta, ysta, zsta
+      real Ip0(Msta), Jp0(Msta), lat(Msta), lon(Msta)
+      character*35 frmt
+      parameter (iunit=50)
+!
+!
+      k=0
+!
+!---------------------------------------------------------------------
+!  Read in stations locations.
+!---------------------------------------------------------------------
+!
+      lstr=lenstr(staposname)
+      open(iunit,file=staposname(1:lstr),form='formatted',
+     &  status='old', err=195)
+!!     write(stdout,10)
+!! 10  format(/,' STATION processing parameters:',/)
+!
+!  Read input parameters according to their input card number.
+!
+      icard=0
+
+      do while (icard.lt.99)
+!
+!  Read in stations identification title.
+!
+        if (icard.eq.1) then
+          read(iunit,'(a)',err=70) statitle
+          lstr=lenstr(statitle)
+!!          if (mynode.eq.0) write(stdout,20) statitle(1:lstr)
+!!  20      format(/,2x,a)
+!
+!  Read in station location.
+!
+        elseif (icard.eq.2) then
+          i=0
+          nstas=0
+          do while (.true.)
+            i=i+1
+            read(iunit,*,err=40) stat0(i), stax0(i), stay0(i), staz0(i),
+     &                           STgrd(i),stacoor(i)
+            nstas=i
+          enddo
+  40      if (stat0(i).ne.99.0) then
+            write(stdout,50) icard, i, staposname
+  50        format(/,
+     &            ' INIT_STATIONS - error while reading input card: ',
+     &            i2, ', STATIONS location entry: ',i3,/,15x,
+     &            'in input script: ',a)
+            stop
+          else
+            Ncount=i-1
+            goto 90
+          endif
+          if (Msta.lt.nstas) then
+            write(stdout,60) Msta, nstas
+  60        format(/,' INIT_STATIONS - too small dimension parameter,',
+     &             ' Msta',2i6,/,15x,'change file  param.h  and',
+     &             ' recompile.')
+            stop
+          endif
+        endif
+!
+!  Read last input card ID.
+!
+        read(iunit,*,err=70) icard
+      enddo
+      goto 90
+!
+!  Error while reading input parameters.
+!
+  70  write(stdout,80) icard, staposname
+  80  format(/,' INIT_STATIONS - error while reading input card: ',
+     &       i2,15x,'in input script: ',a)
+
+  90  close(iunit)
+
+      if (mynode.eq.0) write(stdout,100) nstas
+ 100  format(2x,' INIT_STATIONS -- Number of stations (nstas) : ',i6,/)
+!
+!---------------------------------------------------------------------
+!  Set station location.
+!---------------------------------------------------------------------
+!
+!  Set time of station recording (seconds after model initialization) and
+!  horizontal positions (grid units). Fill the initial vertical level or
+!  depth position.
+!
+      mc=0
+      nc=0
+      do i=1,Ncount
+          nc=nc+1
+          stainfo(istatstr,nc)=(tdays+stat0(i))*day2sec
+          stainfo(istazgrd,nc)=staz0(i)
+          stainfo(istagrd,i)=FLOAT(STgrd(i)) ! each station belongs
+          if (stacoor(i).eq.0) then          ! to this grid initially
+            stax0(i)=stax0(i)-iminmpi+1
+            stay0(i)=stay0(i)-jminmpi+1
+            if (stax0(i).ge.1 .and. stax0(i).lt.Lmmpi+1 .and.
+     &          stay0(i).ge.1 .and. stay0(i).lt.Mmmpi+1) then
+              stainfo(istaxgrd,nc)=MIN(MAX(0.5,stax0(i)),
+     &                                     FLOAT(Lmmpi)+0.5)
+              stainfo(istaygrd,nc)=MIN(MAX(0.5,stay0(i)),
+     &                                     FLOAT(Mmmpi)+0.5)
+            else
+              nc=nc-1
+            endif
+          else
+          endif
+      enddo
+!
+!  Set number of stations to compute.
+!
+      nstas0=nstas
+      nstas=nc
+!
+!  If applicable, convert station positions (lon,lat) to grid
+!  units.
+!
+      if (mc.gt.0) then
+          call hindices (Ip0,Jp0,lon,lat,mc,xr,yr)
+        do i=1,mc
+          nc=index(i)
+          stainfo(istaxgrd,nc)=MIN(MAX(0.5,Ip0(i)),FLOAT(Lmmpi)+0.5)
+          stainfo(istaygrd,nc)=MIN(MAX(0.5,Jp0(i)),FLOAT(Mmmpi)+0.5)
+        enddo
+      endif
+!
+      return
+
+ 195  write(stdout,205) staposname
+ 205  format(/,'station file ',A,/,
+     &   ' not found => station initialization using restart file')
+
+!         call get_initial_sta
+!         ldefsta= .false.
+
+! Test initialization
+!      do nc=1,nfloats
+!      write(stdout,53) nc, Tinfo(ixgrd,nc), Tinfo(iygrd,nc),
+!     &    Tinfo(izgrd,nc), NINT(Tinfo(igrd,nc)), Tinfo(itstr,nc)
+!      enddo
+! Fin test
+
+      return
+      end
+
+      subroutine hindices (Ipos,Jpos,Xpos,Ypos,Npos,Xgrd,Ygrd)
+!
+!================================================ Hernan G. Arango ===
+!  Copyright (c) 2000 Rutgers/UCLA                                   !
+!======================================== Alexander F. Shchepetkin ===
+!                                                                    !
+!  Given position vectors Xpos and Ypos of size Npos,  this routine  !
+!  finds the corresponding indices Ipos and Jpos of the  model grid  !
+!  (Xgrd,Ygrd) cell containing each requested position.              !
+!                                                                    !
+!  Calls:    Try_Range                                               !
+!                                                                    !
+!=====================================================================
+!
+      implicit none
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+!----------------------------------------------------------------------
+! Dimensions of Physical Grid and array dimensions
+!----------------------------------------------------------------------
+!
+! LLm,MMm  Number of the internal points of the PHYSICAL grid.
+!          in the XI- and ETA-directions [physical side boundary
+!          points and peroodic ghost points (if any) are excluded].
+!
+! Lm,Mm    Number of the internal points [see above] of array
+!          covering a Message Passing subdomain. In the case when
+!          no Message Passing partitioning is used, these two are
+!          the same as LLm,MMm.
+!
+! N        Number of vertical levels.
+!
+      integer  LLm,Lm,MMm,Mm,N, LLm0,MMm0
+!      parameter (LLm0=340,  MMm0=831,  N=10)   !  1.5 m Clark
+!      parameter (LLm0=600, MMm0=2000, N=10) ! .5 m Clark
+      parameter (LLm0=300, MMm0=1000, N=10) ! 1 m Clark
+!      parameter (LLm0=150, MMm0=500, N=8) ! 2 m Clark
+
+      parameter (LLm=LLm0,  MMm=MMm0)
+
+!
+!----------------------------------------------------------------------
+! Number of layers in Sediment (SL)
+!----------------------------------------------------------------------
+!
+      integer N_sl
+      !parameter (N_sl=40)
+      parameter (N_sl=0)
+
+!
+!----------------------------------------------------------------------
+!  related variables
+!----------------------------------------------------------------------
+!
+      integer Lmmpi,Mmmpi,iminmpi,imaxmpi,jminmpi,jmaxmpi
+      common /comm_setup_mpi1/ Lmmpi,Mmmpi
+      common /comm_setup_mpi2/ iminmpi,imaxmpi,jminmpi,jmaxmpi
+!
+! Domain subdivision parameters
+! ====== =========== ==========
+!
+! NPP            Maximum allowed number of parallel threads;
+! NSUB_X,NSUB_E  Number of SHARED memory subdomains in XI- and
+!                                                ETA-directions;
+! NNODES        Total number of  processes (nodes);
+! NP_XI,NP_ETA  Number of  subdomains in XI- and ETA-directions;
+!
+      integer NSUB_X, NSUB_E, NPP
+      integer NP_XI, NP_ETA, NNODES
+!      parameter (NP_XI=14,  NP_ETA=40,  NNODES=NP_XI*NP_ETA) ! .5m resolution
+      parameter (NP_XI=6,  NP_ETA=20,  NNODES=NP_XI*NP_ETA) ! 1 m Clark
+!      parameter (NP_XI=7,  NP_ETA=20,  NNODES=NP_XI*NP_ETA) ! 2 m Clark
+      parameter (NPP=1)
+      parameter (NSUB_X=1, NSUB_E=1)
+
+!
+!----------------------------------------------------------------------
+! Number maximum of weights for the barotropic mode
+!----------------------------------------------------------------------
+!
+      integer NWEIGHT
+      parameter (NWEIGHT=1000)
+
+!
+!----------------------------------------------------------------------
+! Tides
+!----------------------------------------------------------------------
+!
+!
+!----------------------------------------------------------------------
+! Wetting-Drying
+!----------------------------------------------------------------------
+!
+      real D_wetdry             ! Critical Depth for Drying cells
+                                ! ======== ===== === ====== =====
+      parameter (D_wetdry=0.05)
+!
+!----------------------------------------------------------------------
+! Minimum water depth above which wave forcing is applied
+! (D_wavedry>D_wetdry if  is activated)
+!----------------------------------------------------------------------
+!
+!----------------------------------------------------------------------
+! Point sources, Floast, Stations
+!----------------------------------------------------------------------
+!
+       integer NS                ! Number of output stations
+       parameter (NS=5)          ! ====== == ====== ========
+       integer Msta              ! Maximum number of stations
+       parameter (Msta=1000)     ! ======= ====== == ========
+
+!
+!----------------------------------------------------------------------
+! Derived dimension parameters
+!----------------------------------------------------------------------
+!
+      integer stdout, Np, NpHz, padd_X,padd_E
+      parameter (stdout=6)
+      parameter (Np=N+1)
+      parameter (NpHz=(N+1+N_sl))
+      parameter (Lm=(LLm+NP_XI-1)/NP_XI, Mm=(MMm+NP_ETA-1)/NP_ETA)
+      parameter (padd_X=(Lm+2)/2-(Lm+1)/2)
+      parameter (padd_E=(Mm+2)/2-(Mm+1)/2)
+
+      integer NSA, N2d,N3d,N3dHz, size_XI,size_ETA
+      integer se,sse, sz,ssz
+      parameter (NSA=35)
+      parameter (size_XI=7+(Lm+NSUB_X-1)/NSUB_X)
+      parameter (size_ETA=7+(Mm+NSUB_E-1)/NSUB_E)
+      parameter (sse=size_ETA/Np, ssz=Np/size_ETA)
+      parameter (se=sse/(sse+ssz), sz=1-se)
+      parameter (N2d=size_XI*(se*size_ETA+sz*Np))
+      parameter (N3d=size_XI*size_ETA*Np)
+      parameter (N3dHz=size_XI*size_ETA*NpHz)
+
+!
+!----------------------------------------------------------------------
+! I/O : flag for type sigma vertical transformation
+!----------------------------------------------------------------------
+!
+      real Vtransform
+      parameter (Vtransform=2)
+
+!
+!----------------------------------------------------------------------
+! Number of tracers
+!----------------------------------------------------------------------
+!
+      integer   NT, NTA, itemp, NTot
+      integer   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
+      integer   ntrc_subs, ntrc_substot
+      integer   ntrc_mld
+!
+      parameter (itemp=0)
+      parameter (ntrc_temp=0)
+      parameter (ntrc_salt=0)
+      parameter (ntrc_mld=0)
+      parameter (ntrc_pas=0)
+      parameter (ntrc_bio=0)
+
+
+!
+      parameter (ntrc_subs=0, ntrc_substot=0)
+
+!
+      parameter (ntrc_sed=0)
+!
+! Total number of active tracers
+!
+      parameter (NTA=itemp+ntrc_salt)
+
+!
+! Total number of tracers
+!
+      parameter (NT=itemp+ntrc_salt+ntrc_pas+ntrc_bio+ntrc_sed+ntrc_mld)
+      parameter (NTot=NT)
+
+
+
+      integer NGLS
+      parameter(NGLS=2)
+      integer itke
+      parameter(itke=1)
+      integer igls
+      parameter(igls=2)
+
+
+!
+!----------------------------------------------------------------------
+! Tracer identification indices
+!----------------------------------------------------------------------
+!
+      integer   ntrc_diats, ntrc_diauv, ntrc_diabio
+      integer   ntrc_diavrt, ntrc_diaek, ntrc_diapv
+      integer   ntrc_diaeddy, ntrc_surf
+!
+
+
+!
+! ================  Parameters  =====================
+!
+
+
+!
+! ===  BIOLOGY  ===
+!
+      parameter (ntrc_diabio=0)
+
+!
+! === SEDIMENTS ===
+!
+
+
+!
+! ===  u,v and tracer equations Diagnostics  ===
+!
+      parameter (ntrc_diats=0)
+      parameter (ntrc_diauv=0)
+      parameter (ntrc_diavrt=0)
+      parameter (ntrc_diaek=0)
+      parameter (ntrc_diapv=0)
+      parameter (ntrc_diaeddy=15)
+      parameter (ntrc_surf=0)
+
+!
+!----------------------------------------------------------------------
+! Max time increment for computing bottom stress at the 3D fast time
+! steps
+!----------------------------------------------------------------------
+!
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+! This is include file "scalars.h"
+!---------------------------------
+!
+!  The following common block contains time variables and indices
+! for 2D (k-indices) and 3D (n-indices) computational engines. Since
+! they are changed together, they are placed into the same cache line
+! despite their mixed type, so that only one cachene is being
+! invalidated and has to be propagated accross the cluster.
+!
+! Note that the real values are placed first into the common block
+! before the integer variables. This is done to prevent the
+! possibility of misallignment of the 8-byte objects in the case
+! when an uneven number of 4-byte integers is placed before a 8-byte
+! real (in the case when default real size is set to 8bytes).
+! Thought misallignment is not formally a violation of fortran
+! standard, it may cause performance degradation and/or make compiler
+! issue a warning message (Sun, DEC Alpha) or even crash (Alpha).
+!
+! time        Time since initialization [seconds];
+! time_start  Initialization time [seconds];
+! tdays       Time since initialization [days];
+! dt          Time step for 3D primitive equations [seconds];
+! dtfast      Time step for 2D (barotropic) mode [seconds];
+!
+      real dt, dtfast, time, time2, time_start, tdays, start_time
+      integer ndtfast, iic, kstp, krhs, knew, next_kstp
+     &      , iif, nstp, nrhs, nnew, nbstep3d
+
+      logical PREDICTOR_2D_STEP
+      common /time_indices/  dt,dtfast, time, time2,time_start, tdays,
+     &     ndtfast, iic, kstp, krhs, knew, next_kstp,
+     &     start_time,
+     &                       iif, nstp, nrhs, nnew, nbstep3d,
+
+     &                       PREDICTOR_2D_STEP
+
+!
+! Slowly changing variables: these are typically set in the beginning
+! of the run and either remain unchanged, or are changing only in
+! association with the I/0.
+!
+! xl, el   Physical size (m) of domain box in the XI-,ETA-directions.
+!
+! Tcline   Width (m) of surface or bottom boundary layer in which
+!          higher vertical resolution is required during stretching.
+! theta_s  S-coordinate surface control parameter, [0<theta_s<20].
+! theta_b  S-coordinate bottom control parameter, [0<theta_b<1].
+! hc       S-coordinate parameter, hc=min(hmin,Tcline).
+!
+! sc_r     S-coordinate independent variable, [-1 < sc < 0] at
+!             vertical RHO-points
+! sc_w     S-coordinate independent variable, [-1 < sc < 0] at
+!             vertical W-points.
+! Cs_r     Set of S-curves used to stretch the vertical coordinate
+!             lines that follow the topography at vertical RHO-points.
+! Cs_w     Set of S-curves used to stretch the vertical coordinate
+!             lines that follow the topography at vertical W-points.
+!
+! rho0     Boussinesque Approximation Mean density [kg/m^3].
+! R0       Background constant density anomaly [kg/m^3] used in
+!                                      linear equation of state.
+! T0,S0    Background temperature (Celsius) and salinity [PSU]
+!                          values used in analytical fields;
+! Tcoef    Thermal expansion coefficient in linear EOS;
+! Scoef    Saline contraction coefficient in linear EOS;
+!
+! rdrg     Linear bottom drag coefficient.
+! rdrg2    Quadratic bottom drag coefficient.
+! Cdb_max  Maximum bottom drag coefficient allowed.
+! Cdb_min  Minimum bottom drag coefficient to avoid the
+!                law-of-the-wall to extend indefinitely.
+! Zobt      Bottom roughness (m).
+!
+! gamma2   Slipperiness parameter, either 1. (free-slip)
+!
+! ntstart  Starting timestep in evolving the 3D primitive equations;
+!                              usually 1, if not a restart run.
+! ntimes   Number of timesteps for the 3D primitive equations in
+!                                                    the current run.
+! ndtfast  Number of timesteps for 2-D equations between each "dt".
+!
+! nrst     Number of timesteps between storage of restart fields.
+! nwrt     Number of timesteps between writing of fields into
+!                                                     history file.
+! ninfo    Number of timesteps between print of single line
+!                                   information to standard output.
+! nsta     Number of timesteps between storage of station data.
+! navg     Number of timesteps between storage of time-averaged
+!                                                           fields.
+! ntsavg   Starting timestep for accumulation of output time-
+!                                                 averaged fields.
+! nrrec    Counter of restart time records to read from disk,
+!                   the last is used as the initial conditions.
+!
+! ldefhis  Logical switch used to create the history file.
+!             If TRUE, a new history file is created. If FALSE,
+!             data is appended to an existing history file.
+! levsfrc  Deepest level to apply surface momentum stress as
+!                                                 bodyforce.
+! levbfrc  Shallowest level to apply bottom momentum stress as
+!                                                 bodyforce.
+! got_tini Logical switch used at initialisation
+!              If TRUE, the tracer is present in the initial file
+!              If FALSE, the tracer needs an analytical value
+!
+! got_inised Logical switch used at initialisation  of sediments
+!              If TRUE, the sediment var. is in the initial file
+!              If FALSE, the sed. var. gets analytical value from file
+!
+! got_inibed Logical switch used at initialisation of ripple height, length
+!              If TRUE, the ripple var. is in the initial file
+!              If FALSE, the ripple var. is obtained from file (ifdef also SEDIMENT)
+!                        the ripple var. is set in ana_bsedim (ifndef SEDIMENT)
+!
+      real time_avg, time2_avg, rho0
+     &               , rdrg, rdrg2, Cdb_min, Cdb_max, Zobt
+     &               , xl, el, visc2, visc4, gamma2
+      real  theta_s,   theta_b,   Tcline,  hc
+      real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
+      real  rx0, rx1
+      real R0,T0,S0, Tcoef, Scoef
+      real weight(6,0:NWEIGHT)
+
+      real  x_sponge,   v_sponge
+       real  tauT_in, tauT_out, tauM_in, tauM_out
+      integer numthreads,     ntstart,   ntimes,  ninfo
+     &      , nfast,  nrrec,     nrst,    nwrt
+     &                                 , ntsavg,  navg
+      integer nwrtdiags_eddy
+      integer ntsdiags_eddy_avg, nwrtdiags_eddy_avg
+      integer nsta, nrpfsta
+
+      logical ldefhis
+      logical ldefdiags_eddy
+      logical ldefdiags_eddy_avg
+      logical ldefsta
+
+      common /scalars_main/
+     &             time_avg, time2_avg,  rho0,      rdrg,    rdrg2
+     &           , Zobt,       Cdb_min,   Cdb_max
+     &           , xl, el,    visc2,     visc4,   gamma2
+     &           , theta_s,   theta_b,   Tcline,  hc
+     &           , sc_w,      Cs_w,      sc_r,    Cs_r
+     &           , rx0,       rx1
+     &                      , R0,T0,S0,  Tcoef,   Scoef
+     &                      , weight
+     &                      , x_sponge,   v_sponge
+     &                      , tauT_in, tauT_out, tauM_in, tauM_out
+     &      , numthreads,     ntstart,   ntimes,  ninfo
+     &      , nfast,  nrrec,     nrst,    nwrt
+     &                                 , ntsavg,  navg
+     &                      , nsta, nrpfsta
+     &                      , ldefdiags_eddy, nwrtdiags_eddy
+     &                      , ldefdiags_eddy_avg
+     &                      , nwrtdiags_eddy_avg
+     &                      , ntsdiags_eddy_avg
+     &                      , ldefsta
+     &                      , ldefhis
+
+      real Akv_bak
+      common /scalars_akv/ Akv_bak
+!
+!-----------------------------------------------------------------------
+! This following common block contains a set of globally accessable
+! variables in order to allow information exchange between parallel
+! threads working on different subdomains.
+!
+! Global summation variables are declared with 16 byte precision
+! to avoid accumulation of roundoff errors, since roundoff error
+! depends on the order of summation, which is undeterministic in
+! the case of summation between the parallel threads; not doing so
+! would make it impossible to pass an ETALON CHECK test if there is
+! a feedback of these sums into the dynamics of the model, such as
+! in the case when global mass conservation is enforced.
+!
+!  One sunny spring day, sometime in 1989 an american tourist, who
+! happened to be an attorney, was walking along a Moscow street.
+! Because it was the period of 'Perestroika' (which literally means
+! 'remodelling'), so that a lot of construction was going on in
+! Moscow, dozens of holes and trenches were open on the street. He
+! felt into one of them, broke his leg, ended up in a hospital and
+! complaining: In my country if a construction firm would not place
+! little red flags around the construction zone to warn passers-by
+! about the danger, I will sue em for their negligence! The doctor,
+! who was performing surgery on his leg replied to him: Did not you
+! see the one big red flag above the whole country in the first place?
+!
+! WARNING: FRAGILE ALIGNMENT SEQUENCE: In the following common block:
+! since real objects are grouped in pairs and integer*4 are grouped
+! in quartets, it is guaranteed that 16 Byte objects are aligned
+! in 16 Byte boundaries and 8 Byte objects are aligned in 8 Byte
+! boundaries. Removing or introduction of variables with violation
+! of parity, as well as changing the sequence of variables in the
+! common block may cause violation of alignment.
+!-----------------------------------------------------------------------
+!
+      logical synchro_flag
+      common /sync_flag/ synchro_flag
+
+      integer may_day_flag  ! This is a shared variable among nested grids
+      integer tile_count, first_time, bc_count
+      common /communicators_i/
+     &        may_day_flag, tile_count, first_time, bc_count
+
+      real hmin, hmax, grdmin, grdmax, Cu_min, Cu_max
+      common /communicators_r/
+     &     hmin, hmax, grdmin, grdmax, Cu_min, Cu_max
+
+
+      real*8 Cu_Adv3d,  Cu_W, Cu_Nbq_X, Cu_Nbq_Y, Cu_Nbq_Z
+      integer i_cx_max, j_cx_max, k_cx_max
+      common /diag_vars/ Cu_Adv3d,  Cu_W,
+     &        i_cx_max, j_cx_max, k_cx_max
+      real*8 volume, avgke, avgpe, avgkp, bc_crss
+
+     &        , avg_vol, avg_rho
+
+      common /communicators_rq/
+     &          volume, avgke, avgpe, avgkp, bc_crss
+     &        , avg_vol, avg_rho
+
+!
+!  related variables
+! === ====== =========
+!
+      logical EAST_INTER2, WEST_INTER2, NORTH_INTER2, SOUTH_INTER2
+      logical EAST_INTER, WEST_INTER, NORTH_INTER, SOUTH_INTER
+      logical CORNER_SW,CORNER_NW,CORNER_NE,CORNER_SE
+      integer mynode, mynode2, ii,jj, p_W,p_E,p_S,p_N, p_SW,p_SE,
+     & p_NW,p_NE,NNODES2
+      common /comm_setup/ mynode, mynode2, ii,jj, p_W,p_E,p_S,p_N,
+     & p_SW,p_SE, p_NW,p_NE, EAST_INTER, WEST_INTER, NORTH_INTER,
+     & SOUTH_INTER, EAST_INTER2, WEST_INTER2, NORTH_INTER2, SOUTH_INTER2,
+     & CORNER_SW,CORNER_NW,CORNER_NE,CORNER_SE,NNODES2
+
+
+!
+! Physical constants:
+! ======== ==========
+
+      real pi, deg2rad, rad2deg
+      parameter (pi=3.14159265358979323846, deg2rad=pi/180.,
+     &                                      rad2deg=180./pi)
+!
+! Earth radius [m]; Earth rotation [rad/s]; Acceleration of gravity [m/s^2];
+! duration of the day in seconds and its inverse; Julian offset day.
+
+      real Eradius, Erotation, g, day2sec,sec2day, jul_off,
+     &     year2day,day2year
+      parameter (Eradius=6371315.0,  Erotation=7.292115090e-5,
+     &           day2sec=86400., sec2day=1./86400.,
+     &           year2day=365.25, day2year=1./365.25,
+     &           jul_off=2440000.)
+!
+! Acceleration of gravity (nondimensional for Soliton problem)
+!
+      parameter (g=9.81)
+!
+!  Specific heat [Joules/kg/degC] for seawater, it is approximately
+!  4000, and varies only slightly (see Gill, 1982, Appendix 3).
+!
+      real Cp
+      parameter (Cp=3985.0)
+
+      real vonKar
+      parameter (vonKar=0.41)
+!
+!   FillValue (Needed if the FILLVAL key is defined)
+!   (See fillvalue.F subroutine)
+      real spval
+      parameter (spval=-999.0)
+      logical mask_val
+      parameter (mask_val = .true.)
+!
+      logical found
+      logical Try_Range
+      integer Imax, Imin, Jmax, Jmin, Npos, i0, j0, k
+      real Ipos(Npos), Jpos(Npos), Xpos(Npos), Ypos(Npos),
+     &  deltax, deltay, dx1, dy1, dx2, dy2, c1, c2
+      real Xgrd(-2:Lm+3+padd_X,-2:Mm+3+padd_E),
+     &     Ygrd(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+!
+!---------------------------------------------------------------------
+!  Determine grid cell indices containing requested position points.
+!  Then, interpolate to fractional cell position.
+!---------------------------------------------------------------------
+!
+!  Initialize all indices.
+!
+      do k=1,Npos
+        Ipos(k)=0.0
+        Jpos(k)=0.0
+      enddo
+!
+!  Check each position to find if it falls inside the whole domain.
+!  Once it is stablished that it inside, find the exact cell to which
+!  it belongs by successively dividing the domain by a half (binary
+!  search).
+!
+      do k=1,Npos
+
+        Imin=0
+        Imax=Lmmpi+1
+        Jmin=0
+        Jmax=Mmmpi+1
+
+        found=Try_Range(Imin,Imax,Jmin,Jmax,Xpos(k),Ypos(k),Xgrd,Ygrd)
+
+        if (found) then
+          do while (((Imax-Imin).gt.1).or.((Jmax-Jmin).gt.1))
+            if ((Imax-Imin).gt.1) then
+              i0=(Imin+Imax)/2
+              found=Try_Range(Imin,i0,Jmin,Jmax,Xpos(k),Ypos(k),
+     &                        Xgrd,Ygrd)
+              if (found) then
+                Imax=i0
+              else
+                Imin=i0
+              endif
+            endif
+            if ((Jmax-Jmin).gt.1) then
+              j0=(Jmin+Jmax)/2
+              found=Try_Range(Imin,Imax,Jmin,j0,Xpos(k),Ypos(k),
+     &                        Xgrd,Ygrd)
+              if (found) then
+                Jmax=j0
+              else
+                Jmin=j0
+              endif
+            endif
+          enddo
+
+! Improved interpolation block (02/06/03). Not totally
+! accurate in case where the grid is strongly deformed.
+! The nonalignment of xsi (eta) axis with longitude
+! (latitude) direction is taken into account.
+
+          dy1=Ygrd(Imin,Jmin+1)-Ygrd(Imin,Jmin)
+          dx1=Xgrd(Imin,Jmin+1)-Xgrd(Imin,Jmin)
+          dy2=Ygrd(Imin+1,Jmin)-Ygrd(Imin,Jmin)
+          dx2=Xgrd(Imin+1,Jmin)-Xgrd(Imin,Jmin)
+
+          c1=Xpos(k)        *dy1-Ypos(k)        *dx1
+          c2=Xgrd(Imin,Jmin)*dy2-Ygrd(Imin,Jmin)*dx2
+          deltax=(c1*dx2-c2*dx1)/(dx2*dy1-dy2*dx1)
+          deltax=(deltax-Xgrd(Imin,Jmin))/dx2
+          Ipos(k)=FLOAT(Imin)+MIN(MAX(0.0,deltax),1.0)
+
+          c1=Xgrd(Imin,Jmin)*dy1-Ygrd(Imin,Jmin)*dx1
+          c2=Xpos(k)        *dy2-Ypos(k)        *dx2
+          deltay=(c1*dy2-c2*dy1)/(dx2*dy1-dy2*dx1)
+          deltay=(deltay-Ygrd(Imin,Jmin))/dy1
+          Jpos(k)=FLOAT(Jmin)+MIN(MAX(0.0,deltay),1.0)
+
+        endif
+      enddo
+      return
+      end
+
+      function Try_Range (Imin,Imax,Jmin,Jmax,Xo,Yo,Xgrd,Ygrd)
+!
+!================================================ Hernan G. Arango ===
+!  Copyright (c) 2000 Rutgers/UCLA                                   !
+!======================================== Alexander F. Shchepetkin ===
+!                                                                    !
+!  Given a grided domain with matrix coordinates Xgrd and Ygrd, this !
+!  function finds if the point (Xo,Yo)  is inside the box defined by !
+!  the requested corners (Imin,Jmin) and (Imax,Jmax). It will return !
+!  logical switch  Try_Range=.true.  if (Xo,Yo) is inside, otherwise !
+!  it will return false.                                             !
+!                                                                    !
+!  Calls:   inside                                                   !
+!                                                                    !
+!=====================================================================
+!
+      implicit none
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+!----------------------------------------------------------------------
+! Dimensions of Physical Grid and array dimensions
+!----------------------------------------------------------------------
+!
+! LLm,MMm  Number of the internal points of the PHYSICAL grid.
+!          in the XI- and ETA-directions [physical side boundary
+!          points and peroodic ghost points (if any) are excluded].
+!
+! Lm,Mm    Number of the internal points [see above] of array
+!          covering a Message Passing subdomain. In the case when
+!          no Message Passing partitioning is used, these two are
+!          the same as LLm,MMm.
+!
+! N        Number of vertical levels.
+!
+      integer  LLm,Lm,MMm,Mm,N, LLm0,MMm0
+!      parameter (LLm0=340,  MMm0=831,  N=10)   !  1.5 m Clark
+!      parameter (LLm0=600, MMm0=2000, N=10) ! .5 m Clark
+      parameter (LLm0=300, MMm0=1000, N=10) ! 1 m Clark
+!      parameter (LLm0=150, MMm0=500, N=8) ! 2 m Clark
+
+      parameter (LLm=LLm0,  MMm=MMm0)
+
+!
+!----------------------------------------------------------------------
+! Number of layers in Sediment (SL)
+!----------------------------------------------------------------------
+!
+      integer N_sl
+      !parameter (N_sl=40)
+      parameter (N_sl=0)
+
+!
+!----------------------------------------------------------------------
+!  related variables
+!----------------------------------------------------------------------
+!
+      integer Lmmpi,Mmmpi,iminmpi,imaxmpi,jminmpi,jmaxmpi
+      common /comm_setup_mpi1/ Lmmpi,Mmmpi
+      common /comm_setup_mpi2/ iminmpi,imaxmpi,jminmpi,jmaxmpi
+!
+! Domain subdivision parameters
+! ====== =========== ==========
+!
+! NPP            Maximum allowed number of parallel threads;
+! NSUB_X,NSUB_E  Number of SHARED memory subdomains in XI- and
+!                                                ETA-directions;
+! NNODES        Total number of  processes (nodes);
+! NP_XI,NP_ETA  Number of  subdomains in XI- and ETA-directions;
+!
+      integer NSUB_X, NSUB_E, NPP
+      integer NP_XI, NP_ETA, NNODES
+!      parameter (NP_XI=14,  NP_ETA=40,  NNODES=NP_XI*NP_ETA) ! .5m resolution
+      parameter (NP_XI=6,  NP_ETA=20,  NNODES=NP_XI*NP_ETA) ! 1 m Clark
+!      parameter (NP_XI=7,  NP_ETA=20,  NNODES=NP_XI*NP_ETA) ! 2 m Clark
+      parameter (NPP=1)
+      parameter (NSUB_X=1, NSUB_E=1)
+
+!
+!----------------------------------------------------------------------
+! Number maximum of weights for the barotropic mode
+!----------------------------------------------------------------------
+!
+      integer NWEIGHT
+      parameter (NWEIGHT=1000)
+
+!
+!----------------------------------------------------------------------
+! Tides
+!----------------------------------------------------------------------
+!
+!
+!----------------------------------------------------------------------
+! Wetting-Drying
+!----------------------------------------------------------------------
+!
+      real D_wetdry             ! Critical Depth for Drying cells
+                                ! ======== ===== === ====== =====
+      parameter (D_wetdry=0.05)
+!
+!----------------------------------------------------------------------
+! Minimum water depth above which wave forcing is applied
+! (D_wavedry>D_wetdry if  is activated)
+!----------------------------------------------------------------------
+!
+!----------------------------------------------------------------------
+! Point sources, Floast, Stations
+!----------------------------------------------------------------------
+!
+       integer NS                ! Number of output stations
+       parameter (NS=5)          ! ====== == ====== ========
+       integer Msta              ! Maximum number of stations
+       parameter (Msta=1000)     ! ======= ====== == ========
+
+!
+!----------------------------------------------------------------------
+! Derived dimension parameters
+!----------------------------------------------------------------------
+!
+      integer stdout, Np, NpHz, padd_X,padd_E
+      parameter (stdout=6)
+      parameter (Np=N+1)
+      parameter (NpHz=(N+1+N_sl))
+      parameter (Lm=(LLm+NP_XI-1)/NP_XI, Mm=(MMm+NP_ETA-1)/NP_ETA)
+      parameter (padd_X=(Lm+2)/2-(Lm+1)/2)
+      parameter (padd_E=(Mm+2)/2-(Mm+1)/2)
+
+      integer NSA, N2d,N3d,N3dHz, size_XI,size_ETA
+      integer se,sse, sz,ssz
+      parameter (NSA=35)
+      parameter (size_XI=7+(Lm+NSUB_X-1)/NSUB_X)
+      parameter (size_ETA=7+(Mm+NSUB_E-1)/NSUB_E)
+      parameter (sse=size_ETA/Np, ssz=Np/size_ETA)
+      parameter (se=sse/(sse+ssz), sz=1-se)
+      parameter (N2d=size_XI*(se*size_ETA+sz*Np))
+      parameter (N3d=size_XI*size_ETA*Np)
+      parameter (N3dHz=size_XI*size_ETA*NpHz)
+
+!
+!----------------------------------------------------------------------
+! I/O : flag for type sigma vertical transformation
+!----------------------------------------------------------------------
+!
+      real Vtransform
+      parameter (Vtransform=2)
+
+!
+!----------------------------------------------------------------------
+! Number of tracers
+!----------------------------------------------------------------------
+!
+      integer   NT, NTA, itemp, NTot
+      integer   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
+      integer   ntrc_subs, ntrc_substot
+      integer   ntrc_mld
+!
+      parameter (itemp=0)
+      parameter (ntrc_temp=0)
+      parameter (ntrc_salt=0)
+      parameter (ntrc_mld=0)
+      parameter (ntrc_pas=0)
+      parameter (ntrc_bio=0)
+
+
+!
+      parameter (ntrc_subs=0, ntrc_substot=0)
+
+!
+      parameter (ntrc_sed=0)
+!
+! Total number of active tracers
+!
+      parameter (NTA=itemp+ntrc_salt)
+
+!
+! Total number of tracers
+!
+      parameter (NT=itemp+ntrc_salt+ntrc_pas+ntrc_bio+ntrc_sed+ntrc_mld)
+      parameter (NTot=NT)
+
+
+
+      integer NGLS
+      parameter(NGLS=2)
+      integer itke
+      parameter(itke=1)
+      integer igls
+      parameter(igls=2)
+
+
+!
+!----------------------------------------------------------------------
+! Tracer identification indices
+!----------------------------------------------------------------------
+!
+      integer   ntrc_diats, ntrc_diauv, ntrc_diabio
+      integer   ntrc_diavrt, ntrc_diaek, ntrc_diapv
+      integer   ntrc_diaeddy, ntrc_surf
+!
+
+
+!
+! ================  Parameters  =====================
+!
+
+
+!
+! ===  BIOLOGY  ===
+!
+      parameter (ntrc_diabio=0)
+
+!
+! === SEDIMENTS ===
+!
+
+
+!
+! ===  u,v and tracer equations Diagnostics  ===
+!
+      parameter (ntrc_diats=0)
+      parameter (ntrc_diauv=0)
+      parameter (ntrc_diavrt=0)
+      parameter (ntrc_diaek=0)
+      parameter (ntrc_diapv=0)
+      parameter (ntrc_diaeddy=15)
+      parameter (ntrc_surf=0)
+
+!
+!----------------------------------------------------------------------
+! Max time increment for computing bottom stress at the 3D fast time
+! steps
+!----------------------------------------------------------------------
+!
+!
+      logical Try_Range, inside
+      integer Imax, Imin, Jmax, Jmin, Nb, NX, i, j, shft
+      parameter(NX=2*(LLm0+2)+2*(MMm0+2)+1)
+      real Xb(NX), Yb(NX), Xo, Yo
+      real Xgrd(-2:Lm+3+padd_X,-2:Mm+3+padd_E),
+     &     Ygrd(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
+!
+!---------------------------------------------------------------------
+!  Define closed polygon.
+!---------------------------------------------------------------------
+!
+!  Note that the last point (Xb(Nb),Yb(Nb)) does not repeat first
+!  point (Xb(1),Yb(1)).  Instead, in function inside, it is implied
+!  that the closing segment is (Xb(Nb),Yb(Nb))-->(Xb(1),Yb(1)). In
+!  fact, function inside sets Xb(Nb+1)=Xb(1) and Yb(Nb+1)=Yb(1).
+!
+      Nb=2*(Jmax-Jmin+Imax-Imin)
+      shft=1-Imin
+      do i=Imin,Imax-1
+        Xb(i+shft)=Xgrd(i,Jmin)
+        Yb(i+shft)=Ygrd(i,Jmin)
+      enddo
+      shft=1-Jmin+Imax-Imin
+      do j=Jmin,Jmax-1
+        Xb(j+shft)=Xgrd(Imax,j)
+        Yb(j+shft)=Ygrd(Imax,j)
+      enddo
+      shft=1+Jmax-Jmin+2*Imax-Imin
+      do i=Imax,Imin+1,-1
+        Xb(shft-i)=Xgrd(i,Jmax)
+        Yb(shft-i)=Ygrd(i,Jmax)
+      enddo
+      shft=1+2*Jmax-Jmin+2*(Imax-Imin)
+      do j=Jmax,Jmin+1,-1
+        Xb(shft-j)=Xgrd(Imin,j)
+        Yb(shft-j)=Ygrd(Imin,j)
+      enddo
+!
+!---------------------------------------------------------------------
+!  Check if point (Xo,Yo) is inside of the defined polygon.
+!---------------------------------------------------------------------
+!
+      Try_Range=inside(Xo,Yo,Xb,Yb,Nb)
+      return
+      end
+      function inside (Xo,Yo,Xb,Yb,Nb)
+!
+!================================================ Hernan G. Arango ===
+!  Copyright (c) 2000 Rutgers/UCLA                                   !
+!======================================== Alexander F. Shchepetkin ===
+!                                                                    !
+!  Given the vectors Xb and Yb of size Nb, defining the coordinates  !
+!  of a closed polygon,  this function find if the point (Xo,Yo) is  !
+!  inside the polygon.  If the point  (Xo,Yo)  falls exactly on the  !
+!  boundary of the polygon, it still considered inside.              !
+!                                                                    !
+!  This algorithm does not rely on the setting of  Xb(Nb)=Xb(1) and  !
+!  Yb(Nb)=Yb(1).  Instead, it assumes that the last closing segment  !
+!  is (Xb(Nb),Yb(Nb)) --> (Xb(1),Yb(1)).                             !
+!                                                                    !
+!  Reference:                                                        !
+!                                                                    !
+!    Reid, C., 1969: A long way from Euclid. Oceanography EMR,       !
+!      page 174.                                                     !
+!                                                                    !
+!  Algorithm:                                                        !
+!                                                                    !
+!  The decision whether the point is  inside or outside the polygon  !
+!  is done by counting the number of crossings from the ray (Xo,Yo)  !
+!  to (Xo,-infinity), hereafter called meridian, by the boundary of  !
+!  the polygon.  In this counting procedure,  a crossing is counted  !
+!  as +2 if the crossing happens from "left to right" or -2 if from  !
+!  "right to left". If the counting adds up to zero, then the point  !
+!  is outside.  Otherwise,  it is either inside or on the boundary.  !
+!                                                                    !
+!  This routine is a modified version of the Reid (1969) algorithm,  !
+!  where all crossings were counted as positive and the decision is  !
+!  made  based on  whether the  number of crossings is even or odd.  !
+!  This new algorithm may produce different results  in cases where  !
+!  Xo accidentally coinsides with one of the (Xb(k),k=1:Nb) points.  !
+!  In this case, the crossing is counted here as +1 or -1 depending  !
+!  of the sign of (Xb(k+1)-Xb(k)).  Crossings  are  not  counted if  !
+!  Xo=Xb(k)=Xb(k+1).  Therefore, if Xo=Xb(k0) and Yo>Yb(k0), and if  !
+!  Xb(k0-1) < Xb(k0) < Xb(k0+1),  the crossing is counted twice but  !
+!  with weight +1 (for segments with k=k0-1 and k=k0). Similarly if  !
+!  Xb(k0-1) > Xb(k0) > Xb(k0+1), the crossing is counted twice with  !
+!  weight -1 each time.  If,  on the other hand,  the meridian only  !
+!  touches the boundary, that is, for example, Xb(k0-1) < Xb(k0)=Xo  !
+!  and Xb(k0+1) < Xb(k0)=Xo, then the crossing is counted as +1 for  !
+!  segment k=k0-1 and -1 for segment k=k0, resulting in no crossing. !
+!                                                                    !
+!  Note 1: (Explanation of the logical condition)                    !
+!                                                                    !
+!  Suppose  that there exist two points  (x1,y1)=(Xb(k),Yb(k))  and  !
+!  (x2,y2)=(Xb(k+1),Yb(k+1)),  such that,  either (x1 < Xo < x2) or  !
+!  (x1 > Xo > x2).  Therefore, meridian x=Xo intersects the segment  !
+!  (x1,y1) -> (x2,x2) and the ordinate of the point of intersection  !
+!  is:                                                               !
+!                                                                    !
+!                 y1*(x2-Xo) + y2*(Xo-x1)                            !
+!             y = -----------------------                            !
+!                          x2-x1                                     !
+!                                                                    !
+!  The mathematical statement that point  (Xo,Yo)  either coinsides  !
+!  with the point of intersection or lies to the north (Yo>=y) from  !
+!  it is, therefore, equivalent to the statement:                    !
+!                                                                    !
+!         Yo*(x2-x1) >= y1*(x2-Xo) + y2*(Xo-x1),   if   x2-x1 > 0    !
+!  or                                                                !
+!         Yo*(x2-x1) <= y1*(x2-Xo) + y2*(Xo-x1),   if   x2-x1 < 0    !
+!                                                                    !
+!  which, after noting that  Yo*(x2-x1) = Yo*(x2-Xo + Xo-x1) may be  !
+!  rewritten as:                                                     !
+!                                                                    !
+!        (Yo-y1)*(x2-Xo) + (Yo-y2)*(Xo-x1) >= 0,   if   x2-x1 > 0    !
+!  or                                                                !
+!        (Yo-y1)*(x2-Xo) + (Yo-y2)*(Xo-x1) <= 0,   if   x2-x1 < 0    !
+!                                                                    !
+!  and both versions can be merged into  essentially  the condition  !
+!  that (Yo-y1)*(x2-Xo)+(Yo-y2)*(Xo-x1) has the same sign as x2-x1.  !
+!  That is, the product of these two must be positive or zero.       !
+!                                                                    !
+!=====================================================================
+!
+      implicit none
+!
+      logical inside
+      integer Nb, Nstep, crossings, i, inc, k, kk, nc
+      parameter (Nstep=128)
+      integer index(Nstep)
+      real Xb(Nb+1), Yb(Nb+1), Xo, Yo, dx1, dx2, dxy
+!
+!---------------------------------------------------------------------
+!  Find intersections.
+!---------------------------------------------------------------------
+!
+!  Set crossings counter and close the contour of the polygon.
+!
+      crossings=0
+      Xb(Nb+1)=Xb(1)
+      Yb(Nb+1)=Yb(1)
+!
+!  The search is optimized.  First select the indices of segments
+!  where Xb(k) is different from Xb(k+1) and Xo falls between them.
+!  Then, further investigate these segments in a separate loop.
+!  Doing it in two stages takes less time because the first loop is
+!  pipelined.
+!
+      do kk=0,Nb-1,Nstep
+        nc=0
+        do k=kk+1,MIN(kk+Nstep,Nb)
+          if (((Xb(k+1)-Xo)*(Xo-Xb(k)).ge.0.0).and.
+     &        (Xb(k).ne.Xb(k+1))) then
+            nc=nc+1
+            index(nc)=k
+          endif
+        enddo
+        do i=1,nc
+          k=index(i)
+          if (Xb(k).ne.Xb(k+1)) then
+            dx1=Xo-Xb(k)
+            dx2=Xb(k+1)-Xo
+            dxy=dx2*(Yo-Yb(k))-dx1*(Yb(k+1)-Yo)
+            inc=0
+            if ((Xb(k).eq.Xo).and.(Yb(k).eq.Yo)) then
+              crossings=1
+              goto 10
+            elseif (((dx1.eq.0.0).and.(Yo.ge.Yb(k  ))).or.
+     &              ((dx2.eq.0.0).and.(Yo.ge.Yb(k+1)))) then
+              inc=1
+            elseif ((dx1*dx2.gt.0.0).and.             ! See Note 1
+     &              ((Xb(k+1)-Xb(k))*dxy.ge.0.0)) then
+              inc=2
+            endif
+            if (Xb(k+1).gt.Xb(k)) then
+              crossings=crossings+inc
+            else
+              crossings=crossings-inc
+            endif
+          endif
+        enddo
+      enddo
+!
+!  Determine if point (Xo,Yo) is inside of closed polygon.
+!
+  10  if (crossings.eq.0) then
+        inside=.false.
+      else
+        inside=.true.
+      endif
+      return
+      end

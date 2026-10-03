@@ -1,0 +1,111 @@
+!======================================================================
+! CROCO is a branch of ROMS developped at IRD, INRIA, 
+! Ifremer, CNRS and Univ. Toulouse III  in France
+! The two other branches from UCLA (Shchepetkin et al)
+! and Rutgers University (Arango et al) are under MIT/X style license.
+! CROCO specific routines (nesting) are under CeCILL-C license.
+!
+! CROCO website : http://www.croco-ocean.org
+!======================================================================
+!
+#ifdef STATIONS
+!  Include file "sta.h".
+!  =====================
+! NSTVARS    Number of stations variables.
+! stainfo    Station initial information.
+! istagrd    Index for station grid (embedding) location
+! istastr    Index for station recording start time.
+! istaxgrd   Index for station x-grid location.
+! istaygrd   Index for station y-grid location.
+! istazgrd   Index for station z-grid location.
+! istalat    Index for station latitude location.
+! istalon    Index for station longitude location.
+! istadpt    Index for station depth.
+! istaz      Index for station sea level
+! istatem    Index for station potential temperature.
+! istasal    Index for station salinity.
+! istaden    Index for station density anomaly.
+! istau      Index for station u-component velocity.
+! istav      Index for station v-component velocity.
+! nstas      Number of stations.
+! stagrd     Station/grid embedding correspondance array.
+! stainfo    Station data at input.
+! stadata    Station variables data collected for output
+! staSigm    Station data at all sigma levels
+! diagsta    Flag taht determines if it is time step station
+
+      integer NSTAVARS,
+     &        istagrd,           istatstr,
+     &        istaxgrd,          istaygrd,        istazgrd,
+     &        istalon,           istalat,         istadpt,
+     &        istatem,           istasal,         istaden,
+     &        istau,             istav,           istaz,
+     &        istavrt
+!======================================================================
+! Simon Treillou, 02/2026 - add tracer concentration and vorticity to station
+# ifdef PASSIVE_TRACER
+     &      , istaptr, nptr_sta
+# endif
+
+# ifdef PASSIVE_TRACER
+#  if defined TEMPERATURE && defined SALINITY
+      parameter (nptr_sta=NT-2)
+#  elif defined TEMPERATURE || defined SALINITY
+      parameter (nptr_sta=NT-1)
+#  else
+      parameter (nptr_sta=NT)
+#  endif
+# endif
+
+# if defined MUSTANG && defined PASSIVE_TRACER
+      parameter (NSTAVARS=12+(NT-2)+nptr_sta,
+# elif defined MUSTANG
+      parameter (NSTAVARS=12+NT-2,
+# elif defined PASSIVE_TRACER
+      parameter (NSTAVARS=12+nptr_sta,
+# else
+      parameter (NSTAVARS=12,
+# endif
+     &        istagrd=-1,        istatstr=0,
+     &        istaxgrd=1,        istaygrd=2,      istazgrd=3,
+     &        istalon=4,         istalat=5,       istadpt=6,
+     &        istatem=7,         istasal=8,       istaden=9,
+     &        istau=10,          istav=11,        istaz=12,
+     &        istavrt=13
+!======================================================================
+! Simon Treillou, 02/2026 - add tracer concentration to station
+# ifdef PASSIVE_TRACER
+     &      , istaptr=14
+# endif
+     &        )
+!======================================================================
+
+!======================================================================
+
+      logical diagsta
+      integer nstas0,nstas, stagrd(Msta)
+      common /stan/ nstas0,nstas, diagsta
+
+      real stainfo(istagrd:istazgrd,Msta)
+      common /sta_info/ stainfo
+
+      real staspval, stadeltap2c
+      common /sta_scalars/ staspval, stadeltap2c
+
+# ifdef ALL_SIGMA
+!======================================================================
+! Simon Treillou, 02/2026 - add tracer concentration to station
+#  if defined MUSTANG || defined PASSIVE_TRACER
+      real stadata(1:NSTAVARS,Msta), staSigm(1:NSTAVARS,Msta,N)
+#  else
+      real stadata(1:NSTAVARS,Msta), staSigm(istadpt:istav,Msta,N)
+#  endif
+!======================================================================
+      common /sta_data/ stadata, staSigm
+# else
+      real stadata(1:NSTAVARS,Msta)
+!     common /sta_data/ stadata,stagrd
+      common /sta_data/ stadata
+# endif
+
+#endif /*STATIONS*/

@@ -1,0 +1,81 @@
+1  STAtitle (a80)
+CROCO  - Station Location
+2  STAt0,  STAx0,  STAy0,  STAz0, STgrd, STAcoor
+    0.0    099      200     10     0       0
+    0.0    099      400     10     0       0
+    0.0    099      600     10     0       0
+    0.0    099      800     10     0       0
+    0.0    111      200     10     0       0
+    0.0    111      400     10     0       0
+    0.0    111      600     10     0       0
+    0.0    111      800     10     0       0
+    0.0    124      200     10     0       0
+    0.0    124      400     10     0       0
+    0.0    124      600     10     0       0
+    0.0    124      800     10     0       0
+    0.0    136      200     10     0       0
+    0.0    136      400     10     0       0
+    0.0    136      600     10     0       0
+    0.0    136      800     10     0       0
+    0.0    148      200     10     0       0
+    0.0    148      400     10     0       0
+    0.0    148      600     10     0       0
+    0.0    148      800     10     0       0
+    0.0    160      200     10     0       0
+    0.0    160      400     10     0       0
+    0.0    160      600     10     0       0
+    0.0    160      800     10     0       0
+    0.0    172      200     10     0       0
+    0.0    172      400     10     0       0
+    0.0    172      600     10     0       0
+    0.0    172      800     10     0       0
+    0.0    185      200     10     0       0
+    0.0    185      400     10     0       0
+    0.0    185      600     10     0       0
+    0.0    185      800     10     0       0
+    0.0    197      200     10     0       0
+    0.0    197      400     10     0       0
+    0.0    197      600     10     0       0
+    0.0    197      800     10     0       0
+    0.0    221      200     10     0       0
+    0.0    221      400     10     0       0
+    0.0    221      600     10     0       0
+    0.0    221      800     10     0       0
+    0.0    245      200     10     0       0
+    0.0    245      400     10     0       0
+    0.0    245      600     10     0       0
+    0.0    245      800     10     0       0
+99 END of station input data
+!
+!------------------------------------------------------------------------------
+! Initial station location KEYWORDS.
+!------------------------------------------------------------------------------
+!
+! STgrd       Nested grid number.
+!
+! STAcoor     Horizontal location coordinate type:
+!
+!              STAcoor = 0,  grid units:  1 =< STAx0 =< Lm(ng)+1,
+!                                         1 =< STAy0 =< Mm(ng)+1
+!
+!              STAcoor = 1,  STAx0 is longitude (west values are negative).
+!                            STAy0 is latitude (south values are negative).
+!
+! STAt0       Time (days) of station release after model initialization .
+!
+! STAx0       Station x-location (real; grid units or longitude).
+!
+! STAy0       Station y-location (real; grid units or latitude).
+!
+! STAz0       Station z-location (real; vertical level or depth).
+!              - If STAz0 < 0 , STAz0 is the depth in meters.
+!              - If STAz0 > 0 and 0 < STAz0 =< N,
+!              STAz0 is the position relative to the W grid
+!              (0 = bottom; N = surface).
+!              - If ALL_SIGMA is defined, all sigma levels are stored
+!
+!              WARNING: If the depth in meters at particular horizontal
+!                       is not bounded, the stations are released at the
+!                       surface.
+!
+!------------------------------------------------------------------------------
