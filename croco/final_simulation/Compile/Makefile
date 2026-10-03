@@ -13,9 +13,6 @@
 #======================================================================
 # Set machine dependent definitions and rules.
 #======================================================================
-#======================================================================
-# Simon Treillou, 02/2026 - add non periodic tracer boundaries
-#======================================================================
 
 include Makedefs
 #======================================================================
@@ -109,7 +106,6 @@ include Makedefs
 	biology.F	o2sato.F	sediment.F	bbl.F\
 \
 	MPI_Setup.F	MessPass2D.F	MessPass3D.F	exchange.F\
-        MessPass3D_noper.F\
 \
 	zoom.F		update2D.F	set_nudgcof_fine.F\
 	zoombc_2D.F	zoombc_3D.F	uv3dpremix.F\
@@ -159,6 +155,7 @@ include Makedefs
 	module_oa_time.F90	module_oa_space.F90 module_oa_periode.F90\
 	module_oa_variables.F90	module_oa_type.F90 module_tile_oa.F90\
 	module_oa_level.F90 module_oa_interface.F90 var_oa.F90\
+	tools_string.F90\
 	tooldatosec.F90	toolsectodat.F90 tooldecompdat.F90 tooldatetosec.F90 \
 	toolorigindate.F90 \
 	flocmod.F90 comsubstance.F90 submassbalance.F90 substance.F90\

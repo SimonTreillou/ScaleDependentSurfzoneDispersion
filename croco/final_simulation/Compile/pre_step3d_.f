@@ -45,11 +45,11 @@
       integer*4   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
       integer*4   ntrc_subs, ntrc_substot
       integer*4   ntrc_mld
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
       parameter (ntrc_bio=0)
       parameter (ntrc_subs=0, ntrc_substot=0)
       parameter (ntrc_sed=0)
@@ -65,6 +65,8 @@
       integer*4   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer*4   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer*4   ntrc_diaeddy, ntrc_surf
+     &          , itpas
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
       parameter (ntrc_diabio=0)
       parameter (ntrc_diats=0)
       parameter (ntrc_diauv=0)
@@ -172,11 +174,11 @@
       integer*4   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
       integer*4   ntrc_subs, ntrc_substot
       integer*4   ntrc_mld
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
       parameter (ntrc_bio=0)
       parameter (ntrc_subs=0, ntrc_substot=0)
       parameter (ntrc_sed=0)
@@ -192,6 +194,8 @@
       integer*4   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer*4   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer*4   ntrc_diaeddy, ntrc_surf
+     &          , itpas
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
       parameter (ntrc_diabio=0)
       parameter (ntrc_diats=0)
       parameter (ntrc_diauv=0)
@@ -338,6 +342,8 @@
       common /bmsdat4/bmscycle,   bms_onerec,   lbusgrd,   lbvsgrd
       real stflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E,NT)
       common /forces_stflx/stflx
+      real btflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E,NT)
+      common /forces_btflx/btflx
       real srflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
       common /forces_srflx/srflx
       integer*4 Nfrq, Ndir
@@ -408,6 +414,7 @@
       real  theta_s,   theta_b,   Tcline,  hc
       real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
       real  rx0, rx1
+      real  tnu2(NT),tnu4(NT)
       real R0,T0,S0, Tcoef, Scoef
       real weight(6,0:NWEIGHT)
       real  x_sponge,   v_sponge
@@ -419,6 +426,7 @@
       integer*4 ntsdiags_eddy_avg, nwrtdiags_eddy_avg
       integer*4 nsta, nrpfsta
       logical ldefhis
+      logical got_tini(NT)
       logical ldefdiags_eddy
       logical ldefdiags_eddy_avg
       logical ldefsta
@@ -429,6 +437,7 @@
      &           , theta_s,   theta_b,   Tcline,  hc
      &           , sc_w,      Cs_w,      sc_r,    Cs_r
      &           , rx0,       rx1
+     &           ,       tnu2,    tnu4
      &                      , R0,T0,S0,  Tcoef,   Scoef
      &                      , weight
      &                      , x_sponge,   v_sponge
@@ -437,6 +446,7 @@
      &      , nfast,  nrrec,     nrst,    nwrt
      &                                 , ntsavg,  navg
      &                      , nsta, nrpfsta
+     &                      , got_tini
      &                      , ldefdiags_eddy, nwrtdiags_eddy
      &                      , ldefdiags_eddy_avg
      &                      , nwrtdiags_eddy_avg
@@ -445,6 +455,8 @@
      &                      , ldefhis
       real Akv_bak
       common /scalars_akv/ Akv_bak
+      real Akt_bak(NT)
+      common /scalars_akt/ Akt_bak
       logical synchro_flag
       common /sync_flag/ synchro_flag
       integer*4 may_day_flag
@@ -699,6 +711,140 @@
       endif
       jmin=Jstr-2
       jmax=Jend+2
+      do itrc=1,NT
+      do k=1,N
+          cdif=1.D0
+          jmin=1
+          jmax=Mmmpi+1
+          if (WEST_INTER) then
+            imin=1
+          else
+            imin=3
+          endif
+          if (EAST_INTER) then
+            imax=Lmmpi+1
+          else
+            imax=Lmmpi-1
+          endif
+!$acc loop independent
+          DO j = Jstr,Jend+1
+            IF ( j.ge.jmin .and. j.le.jmax ) THEN
+!$acc loop independent private(vel)
+              DO i = Istr,Iend
+                vel = Hvom(i,j,k)
+                flx5 = vel*flux5_weno(
+     &             t(i,j-3,k,nrhs,itrc), t(i,j-2,k,nrhs,itrc),
+     &             t(i,j-1,k,nrhs,itrc), t(i,j  ,k,nrhs,itrc),
+     &             t(i,j+1,k,nrhs,itrc), t(i,j+2,k,nrhs,itrc),  vel )
+                FE(i,j)=flx5
+              ENDDO
+            ELSE IF ( j.eq.jmin-2 ) THEN
+!$acc loop independent private(vel)
+              DO i = Istr,Iend
+                vel = Hvom(i,j,k)
+                FE(i,j) = vel*flux1(
+     &             t(i,j-1,k,nrhs,itrc), t(i,j,k,nrhs,itrc), vel, cdif)
+              ENDDO
+            ELSE IF ( j.eq.jmin-1 .and. jmax.ge.jmin ) THEN
+!$acc loop independent private(vel)
+              DO i = Istr,Iend
+                vel = Hvom(i,j,k)
+                flx3 = vel*flux3_weno(
+     &             t(i,j-2,k,nrhs,itrc), t(i,j-1,k,nrhs,itrc),
+     &             t(i,j  ,k,nrhs,itrc), t(i,j+1,k,nrhs,itrc),  vel )
+                FE(i,j)=flx3
+              ENDDO
+            ELSE IF ( j.eq.jmax+2 ) THEN
+!$acc loop independent private(vel)
+              DO i = Istr,Iend
+                vel = Hvom(i,j,k)
+                FE(i,j) = vel*flux1(
+     &             t(i,j-1,k,nrhs,itrc), t(i,j,k,nrhs,itrc), vel, cdif)
+              ENDDO
+            ELSE IF ( j.eq.jmax+1 ) THEN
+!$acc loop independent private(vel)
+              DO i = Istr,Iend
+                vel = Hvom(i,j,k)
+                flx3 = vel*flux3_weno(
+     &             t(i,j-2,k,nrhs,itrc), t(i,j-1,k,nrhs,itrc),
+     &             t(i,j  ,k,nrhs,itrc), t(i,j+1,k,nrhs,itrc),  vel )
+                FE(i,j)=flx3
+              ENDDO
+            ENDIF
+          ENDDO
+!$acc loop independent
+          DO i = Istr,Iend+1
+            IF ( i.ge.imin .and. i.le.imax ) THEN
+!$acc loop independent  private(vel)
+              DO j = Jstr,Jend
+                vel = Huon(i,j,k)
+                flx5 = vel*flux5_weno(
+     &             t(i-3,j,k,nrhs,itrc), t(i-2,j,k,nrhs,itrc),
+     &             t(i-1,j,k,nrhs,itrc), t(i  ,j,k,nrhs,itrc),
+     &             t(i+1,j,k,nrhs,itrc), t(i+2,j,k,nrhs,itrc),  vel )
+                FX(i,j)=flx5
+              ENDDO
+            ELSE IF ( i.eq.imin-2 ) THEN
+!$acc loop independent private(vel)
+              DO j = Jstr,Jend
+                vel = Huon(i,j,k)
+                FX(i,j) = vel*flux1(
+     &             t(i-1,j,k,nrhs,itrc), t(i,j,k,nrhs,itrc), vel, cdif)
+              ENDDO
+            ELSE IF ( i.eq.imin-1 .and. imax.ge.imin ) THEN
+!$acc loop independent private(vel)
+              DO j = Jstr,Jend
+                vel = Huon(i,j,k)
+                flx3 = vel*flux3_weno(
+     &             t(i-2,j,k,nrhs,itrc), t(i-1,j,k,nrhs,itrc),
+     &             t(i  ,j,k,nrhs,itrc), t(i+1,j,k,nrhs,itrc),  vel )
+                FX(i,j)=flx3
+              ENDDO
+            ELSE IF ( i.eq.imax+2 ) THEN
+!$acc loop independent  private(vel)
+              DO j = Jstr,Jend
+                vel = Huon(i,j,k)
+                FX(i,j) = vel*flux1(
+     &             t(i-1,j,k,nrhs,itrc), t(i,j,k,nrhs,itrc), vel, cdif)
+              ENDDO
+            ELSE IF ( i.eq.imax+1 ) THEN
+!$acc loop independent  private(vel)
+              DO j = Jstr,Jend
+                vel = Huon(i,j,k)
+                flx3 = vel*flux3_weno(
+     &             t(i-2,j,k,nrhs,itrc), t(i-1,j,k,nrhs,itrc),
+     &             t(i  ,j,k,nrhs,itrc), t(i+1,j,k,nrhs,itrc),  vel )
+                FX(i,j)=flx3
+              ENDDO
+            ENDIF
+          ENDDO
+          if (iic.eq.ntstart) then
+            cff=0.5D0*dt
+!$acc parallel loop if(compute_on_device) default(present)
+            do j=Jstr,Jend
+              do i=Istr,Iend
+                t(i,j,k,nnew,itrc)=Hz(i,j,k)*t(i,j,k,nstp,itrc)
+     &                 -cff*pm(i,j)*pn(i,j)*( FX(i+1,j)-FX(i,j)
+     &                                      +FE(i,j+1)-FE(i,j))
+              enddo
+            enddo
+          else
+            cff=(1.D0-gamma)*dt
+            cff1=0.5D0+gamma
+            cff2=0.5D0-gamma
+!$acc parallel loop if(compute_on_device) default(present)
+!$acc& collapse(3)
+            do j=Jstr,Jend
+              do i=Istr,Iend
+                t(i,j,k,nnew,itrc)=cff1*Hz(i,j,k)*t(i,j,k,nstp,itrc)
+     &                            +cff2*Hz_bak(i,j,k)*t(i,j,k,indx,itrc)
+     &                -cff*pm(i,j)*pn(i,j)*( FX(i+1,j)-FX(i,j)
+     &                                     +FE(i,j+1)-FE(i,j))
+              enddo
+            enddo
+          endif
+        enddo
+      enddo
 !$acc kernels if(compute_on_device) default(present)
       if (iic.eq.ntstart) then
             cdt=0.5D0*dt
@@ -715,6 +861,56 @@
            rv_int_nbq_2d(i,j)=0.D0
         enddo
       enddo
+        do j=Jstr,Jend
+        do k=1,N
+          do i=Istr,Iend
+             DC(i,k)=1.D0/Hz_half(i,j,k)
+          enddo
+        enddo
+        do i=Istr,Iend
+           DC(i,0)=cdt*pn(i,j)*pm(i,j)
+        enddo
+        do itrc=1,NT
+          do k=3,N-3
+            do i=Istr,Iend
+              FC(i,k)=We(i,j,k)*
+     &              flux5_weno(
+     &             t(i,j,k-2,nadv,itrc), t(i,j,k-1,nadv,itrc),
+     &             t(i,j,k  ,nadv,itrc), t(i,j,k+1,nadv,itrc),
+     &             t(i,j,k+2,nadv,itrc), t(i,j,k+3,nadv,itrc), 
+     &                                                        We(i,j,k))
+            enddo
+          enddo
+          do i=Istr,Iend
+            FC(i,2)=We(i,j,2)*
+     &              flux3_weno(
+     &             t(i,j,1,nadv,itrc), t(i,j,2,nadv,itrc),
+     &             t(i,j,3,nadv,itrc), t(i,j,4,nadv,itrc), We(i,j,2))
+            FC(i,N-2)=We(i,j,N-2)*
+     &              flux3_weno(
+     &             t(i,j,N-3,nadv,itrc), t(i,j,N-2,nadv,itrc),
+     &             t(i,j,N-1,nadv,itrc), t(i,j,N  ,nadv,itrc), 
+     &                                                      We(i,j,N-2))
+            FC(i,1  )=We(i,j,1)*
+     &              flux1(
+     &             t(i,j,1  ,nadv,itrc),
+     &             t(i,j,2  ,nadv,itrc), We(i,j,1  ), 1.D0)
+            FC(i,N-1)=We(i,j,N-1)*
+     &              flux1(
+     &             t(i,j,N-1,nadv,itrc),
+     &             t(i,j,N  ,nadv,itrc), We(i,j,N-1), 1.D0)
+            FC(i,0)=0.D0
+            FC(i,N )=0.D0
+            CF(i,0)=dt*pm(i,j)*pn(i,j)
+          enddo
+          do k=1,N
+            do i=Istr,Iend
+              t(i,j,k,nnew,itrc)=DC(i,k)*( t(i,j,k,nnew,itrc)
+     &               -DC(i,0)*(FC(i,k)-FC(i,k-1)))
+            enddo
+          enddo
+        enddo
+        enddo
       do j=Jstr,Jend
         do i=IstrU,Iend
           WORK(i,j)=pm_u(i,j)*pn_u(i,j)
@@ -882,6 +1078,11 @@
       endif
       enddo
 !$acc end kernels
+      do itrc=1,NT
+        call t3dbc_tile (Istr,Iend,Jstr,Jend, nnew,itrc, WORK)
+          call exchange_r3d_3pts_tile (Istr,Iend,Jstr,Jend,
+     &                                 t(-2,-2,1,nnew,itrc))
+      enddo
       call u3dbc_tile (Istr,Iend,Jstr,Jend, WORK)
       call v3dbc_tile (Istr,Iend,Jstr,Jend, WORK)
       call w3dbc_tile (Istr,Iend,Jstr,Jend, WORK)
@@ -896,6 +1097,7 @@
         do j=Jstr-1,Jend+1
           do i=Istr-1,Iend+1
             Akv_old(i,j,k)=Akv(i,j,k)
+            Akt_old(i,j,k)=Akt(i,j,k,itemp)
           enddo
         enddo
       enddo

@@ -44,11 +44,11 @@
       integer*4   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
       integer*4   ntrc_subs, ntrc_substot
       integer*4   ntrc_mld
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
       parameter (ntrc_bio=0)
       parameter (ntrc_subs=0, ntrc_substot=0)
       parameter (ntrc_sed=0)
@@ -64,6 +64,8 @@
       integer*4   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer*4   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer*4   ntrc_diaeddy, ntrc_surf
+     &          , itpas
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
       parameter (ntrc_diabio=0)
       parameter (ntrc_diats=0)
       parameter (ntrc_diauv=0)
@@ -79,13 +81,16 @@
      &        istatem,           istasal,         istaden,
      &        istau,             istav,           istaz,
      &        istavrt
-      parameter (NSTAVARS=12,
+     &      , istaptr, nptr_sta
+      parameter (nptr_sta=NT-1)
+      parameter (NSTAVARS=12+nptr_sta,
      &        istagrd=-1,        istatstr=0,
      &        istaxgrd=1,        istaygrd=2,      istazgrd=3,
      &        istalon=4,         istalat=5,       istadpt=6,
      &        istatem=7,         istasal=8,       istaden=9,
      &        istau=10,          istav=11,        istaz=12,
      &        istavrt=13
+     &      , istaptr=14
      &        )
       logical diagsta
       integer*4 nstas0,nstas, stagrd(Msta)
@@ -94,7 +99,7 @@
       common /sta_info/ stainfo
       real staspval, stadeltap2c
       common /sta_scalars/ staspval, stadeltap2c
-      real stadata(1:NSTAVARS,Msta), staSigm(istadpt:istav,Msta,N)
+      real stadata(1:NSTAVARS,Msta), staSigm(1:NSTAVARS,Msta,N)
       common /sta_data/ stadata, staSigm
       real dt, dtfast, time, time2, time_start, tdays, start_time
       integer*4 ndtfast, iic, kstp, krhs, knew, next_kstp
@@ -111,6 +116,7 @@
       real  theta_s,   theta_b,   Tcline,  hc
       real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
       real  rx0, rx1
+      real  tnu2(NT),tnu4(NT)
       real R0,T0,S0, Tcoef, Scoef
       real weight(6,0:NWEIGHT)
       real  x_sponge,   v_sponge
@@ -122,6 +128,7 @@
       integer*4 ntsdiags_eddy_avg, nwrtdiags_eddy_avg
       integer*4 nsta, nrpfsta
       logical ldefhis
+      logical got_tini(NT)
       logical ldefdiags_eddy
       logical ldefdiags_eddy_avg
       logical ldefsta
@@ -132,6 +139,7 @@
      &           , theta_s,   theta_b,   Tcline,  hc
      &           , sc_w,      Cs_w,      sc_r,    Cs_r
      &           , rx0,       rx1
+     &           ,       tnu2,    tnu4
      &                      , R0,T0,S0,  Tcoef,   Scoef
      &                      , weight
      &                      , x_sponge,   v_sponge
@@ -140,6 +148,7 @@
      &      , nfast,  nrrec,     nrst,    nwrt
      &                                 , ntsavg,  navg
      &                      , nsta, nrpfsta
+     &                      , got_tini
      &                      , ldefdiags_eddy, nwrtdiags_eddy
      &                      , ldefdiags_eddy_avg
      &                      , nwrtdiags_eddy_avg
@@ -148,6 +157,8 @@
      &                      , ldefhis
       real Akv_bak
       common /scalars_akv/ Akv_bak
+      real Akt_bak(NT)
+      common /scalars_akt/ Akt_bak
       logical synchro_flag
       common /sync_flag/ synchro_flag
       integer*4 may_day_flag

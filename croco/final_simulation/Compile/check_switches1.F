@@ -12,7 +12,7 @@
 !!!!!! as an independent program, or use commands              !!!!!!
 !!!!!! "make checkdefs" or "make depend".                      !!!!!!
 !!!!!! Number of Configuration Choices:                     36 !!!!!!
-!!!!!! Total number of CPP-switches:                       502 !!!!!!
+!!!!!! Total number of CPP-switches:                       504 !!!!!!
 
       implicit none
       integer ierr, is,ie, iexample
@@ -2496,35 +2496,43 @@
       Coptions(ie+1:ie+1)=' '
       is=ie+2
 #endif
-#ifdef MR
-      MPI_master_only write(stdout,'(10x,A)') 'MR'
+#ifdef VS
+      MPI_master_only write(stdout,'(10x,A)') 'VS'
       ie=is + 1
       if (ie.ge.max_opt_size) goto 99
-      Coptions(is:ie)='MR'
+      Coptions(is:ie)='VS'
       Coptions(ie+1:ie+1)=' '
       is=ie+2
 #endif
-#ifdef TRCMR
-      MPI_master_only write(stdout,'(10x,A)') 'TRCMR'
-      ie=is + 4
+#ifdef SC
+      MPI_master_only write(stdout,'(10x,A)') 'SC'
+      ie=is + 1
       if (ie.ge.max_opt_size) goto 99
-      Coptions(is:ie)='TRCMR'
+      Coptions(is:ie)='SC'
       Coptions(ie+1:ie+1)=' '
       is=ie+2
 #endif
-#ifdef MRSW
-      MPI_master_only write(stdout,'(10x,A)') 'MRSW'
+#ifdef VSSC
+      MPI_master_only write(stdout,'(10x,A)') 'VSSC'
       ie=is + 3
       if (ie.ge.max_opt_size) goto 99
-      Coptions(is:ie)='MRSW'
+      Coptions(is:ie)='VSSC'
       Coptions(ie+1:ie+1)=' '
       is=ie+2
 #endif
-#ifdef TRCMRSW
-      MPI_master_only write(stdout,'(10x,A)') 'TRCMRSW'
-      ie=is + 6
+#ifdef VSLD
+      MPI_master_only write(stdout,'(10x,A)') 'VSLD'
+      ie=is + 3
       if (ie.ge.max_opt_size) goto 99
-      Coptions(is:ie)='TRCMRSW'
+      Coptions(is:ie)='VSLD'
+      Coptions(ie+1:ie+1)=' '
+      is=ie+2
+#endif
+#ifdef VSLDSC
+      MPI_master_only write(stdout,'(10x,A)') 'VSLDSC'
+      ie=is + 5
+      if (ie.ge.max_opt_size) goto 99
+      Coptions(is:ie)='VSLDSC'
       Coptions(ie+1:ie+1)=' '
       is=ie+2
 #endif
@@ -2597,6 +2605,14 @@
       ie=is +14
       if (ie.ge.max_opt_size) goto 99
       Coptions(is:ie)='INPUT_DIRSPREAD'
+      Coptions(ie+1:ie+1)=' '
+      is=ie+2
+#endif
+#ifdef DEEP_BREAKING
+      MPI_master_only write(stdout,'(10x,A)') 'DEEP_BREAKING'
+      ie=is +12
+      if (ie.ge.max_opt_size) goto 99
+      Coptions(is:ie)='DEEP_BREAKING'
       Coptions(ie+1:ie+1)=' '
       is=ie+2
 #endif

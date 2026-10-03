@@ -340,7 +340,7 @@
 #
 # Total number of files analyzed for dependencies:    454
 #
-# Total number of code lines in all files:         222438
+# Total number of code lines in all files:         222454
 #
 #
 buffer.o  : buffer.F90 param.o   

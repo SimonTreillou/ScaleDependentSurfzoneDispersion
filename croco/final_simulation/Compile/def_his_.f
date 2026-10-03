@@ -50,11 +50,11 @@
       integer*4   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
       integer*4   ntrc_subs, ntrc_substot
       integer*4   ntrc_mld
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
       parameter (ntrc_bio=0)
       parameter (ntrc_subs=0, ntrc_substot=0)
       parameter (ntrc_sed=0)
@@ -70,6 +70,8 @@
       integer*4   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer*4   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer*4   ntrc_diaeddy, ntrc_surf
+     &          , itpas
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
       parameter (ntrc_diabio=0)
       parameter (ntrc_diats=0)
       parameter (ntrc_diauv=0)
@@ -93,6 +95,7 @@
       real  theta_s,   theta_b,   Tcline,  hc
       real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
       real  rx0, rx1
+      real  tnu2(NT),tnu4(NT)
       real R0,T0,S0, Tcoef, Scoef
       real weight(6,0:NWEIGHT)
       real  x_sponge,   v_sponge
@@ -104,6 +107,7 @@
       integer*4 ntsdiags_eddy_avg, nwrtdiags_eddy_avg
       integer*4 nsta, nrpfsta
       logical ldefhis
+      logical got_tini(NT)
       logical ldefdiags_eddy
       logical ldefdiags_eddy_avg
       logical ldefsta
@@ -114,6 +118,7 @@
      &           , theta_s,   theta_b,   Tcline,  hc
      &           , sc_w,      Cs_w,      sc_r,    Cs_r
      &           , rx0,       rx1
+     &           ,       tnu2,    tnu4
      &                      , R0,T0,S0,  Tcoef,   Scoef
      &                      , weight
      &                      , x_sponge,   v_sponge
@@ -122,6 +127,7 @@
      &      , nfast,  nrrec,     nrst,    nwrt
      &                                 , ntsavg,  navg
      &                      , nsta, nrpfsta
+     &                      , got_tini
      &                      , ldefdiags_eddy, nwrtdiags_eddy
      &                      , ldefdiags_eddy_avg
      &                      , nwrtdiags_eddy_avg
@@ -130,6 +136,8 @@
      &                      , ldefhis
       real Akv_bak
       common /scalars_akv/ Akv_bak
+      real Akt_bak(NT)
+      common /scalars_akt/ Akt_bak
       logical synchro_flag
       common /sync_flag/ synchro_flag
       integer*4 may_day_flag
@@ -201,6 +209,11 @@
       parameter (indxTime=1, indxZ=2, indxUb=3, indxVb=4)
       integer*4 indxU, indxV
       parameter (indxU=6, indxV=7)
+      integer*4 indxT
+      parameter (indxT=indxV+1)
+      integer*4, dimension(ntrc_pas) :: indxTPAS
+     & =(/(iloop,iloop=indxV+ntrc_temp+ntrc_salt+ntrc_mld+1,
+     &  indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas)/)
       integer*4 indxBSD, indxBSS
       parameter (indxBSD=indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas+
      &           ntrc_bio+1,
@@ -290,9 +303,12 @@
      &     , ncidqbar, ncidbtf
      &     , ntsrf,  ntssh,  ntsst, ntsss, ntuclm
      &     , ntbulk, ntqbar, ntww
+      integer*4 nttclm(NT), ntstf(NT), nttsrc(NT)
+     &       , ntbtf(NT)
       integer*4 ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+      integer*4 rstT(NT)
       integer*4 rstAkv,rstAkt
       integer*4 rstTke,rstGls
       integer*4 rstBustr, rstBvstr
@@ -327,6 +343,7 @@
      &      , avgAkv, avgAkt, avgAks
      &      , avgbvf
      &      , avgTke, avgGls, avgLsc
+      integer*4 avgT(NT)
        integer*4 nciddiags_eddy_avg, nrecdiags_eddy_avg
      &      , nrpfdiags_eddy_avg
      &      , diags_eddyTime_avg, diags_eddyTime2_avg
@@ -348,9 +365,11 @@
      &     ncidfrc, ncidbulk,ncidclm, ncidqbar, ncidbtf
      &     , ntsms, ntsrf, ntssh, ntsst
      &     , ntuclm, ntsss, ntbulk, ntqbar, ntww
+     &     ,  nttclm, ntstf, nttsrc, ntbtf
      &      , ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+     & ,   rstT
      &      , rstAkv,rstAkt
      &      , rstTke,rstGls
      &      , rstBustr,rstBvstr
@@ -393,6 +412,7 @@
      &      , avgShflx, avgSwflx, avgShflx_rsw
      &      , avgBhflx, avgBwflx
      &      , avgU,    avgV
+     &      ,     avgT
      &      ,     avgR
      &      , avgO,    avgW,     avgVisc,  avgDiff
      &      , avgAkv,  avgAkt,   avgAks
@@ -1458,6 +1478,25 @@
           call nf_add_attribute(ncid, hisV, vname(:,indxV),
      &         5, NF_REAL, ierr)
         endif
+        do itrc=1,NT
+          if (wrthis(indxV+itrc)) then
+            lvar=lenstr(vname(1,indxV+itrc))
+            ierr=nf_def_var (ncid, vname(1,indxV+itrc)(1:lvar),
+     &                             NF_REAL, 4, r3dgrd, hisT(itrc))
+          ierr=nf_var_par_access(ncid,hisT(itrc),nf_collective)
+            lvar=lenstr(vname(2,indxV+itrc))
+            ierr=nf_put_att_text (ncid, hisT(itrc), 'long_name',
+     &                         lvar, vname(2,indxV+itrc)(1:lvar))
+            lvar=lenstr(vname(3,indxV+itrc))
+            ierr=nf_put_att_text (ncid, hisT(itrc), 'units', lvar,
+     &                               vname(3,indxV+itrc)(1:lvar))
+            lvar=lenstr(vname(4,indxV+itrc))
+            ierr=nf_put_att_text (ncid, hisT(itrc), 'field', lvar,
+     &                               vname(4,indxV+itrc)(1:lvar))
+            call nf_add_attribute(ncid,hisT(itrc),vname(:,indxV+itrc),5,
+     &           NF_REAL, ierr)
+          endif
+        enddo
         if (wrthis(indxR)) then
           lvar=lenstr(vname(1,indxR))
           ierr=nf_def_var (ncid, vname(1,indxR)(1:lvar),
@@ -1644,6 +1683,23 @@
           call nf_add_attribute(ncid, hisAkv, vname(:,indxAkv),
      &                          5, NF_REAL, ierr)
         endif
+        if (wrthis(indxAkt)) then
+          lvar=lenstr(vname(1,indxAkt))
+          ierr=nf_def_var (ncid, vname(1,indxAkt)(1:lvar),
+     &                              NF_REAL, 4, w3dgrd, hisAkt)
+          ierr=nf_var_par_access(ncid,hisAkt,nf_collective)
+          lvar=lenstr(vname(2,indxAkt))
+          ierr=nf_put_att_text (ncid, hisAkt, 'long_name', lvar,
+     &                                  vname(2,indxAkt)(1:lvar))
+          lvar=lenstr(vname(3,indxAkt))
+          ierr=nf_put_att_text (ncid, hisAkt, 'units',     lvar,
+     &                                  vname(3,indxAkt)(1:lvar))
+          lvar=lenstr(vname(4,indxAkt))
+          ierr=nf_put_att_text (ncid, hisAkt, 'field',     lvar,
+     &                                  vname(4,indxAkt)(1:lvar))
+          call nf_add_attribute(ncid, hisAkt, vname(:,indxAkt),
+     &                           5, NF_REAL, ierr)
+        endif
         if (wrthis(indxHbl)) then
           lvar=lenstr(vname(1,indxHbl))
           ierr=nf_def_var (ncid, vname(1,indxHbl)(1:lvar),
@@ -1712,6 +1768,34 @@
           call nf_add_attribute(ncid, hisLsc, vname(:,indxLsc),
      &                          5, NF_REAL, ierr)
         endif
+        if (wrthis(indxShflx)) then
+          lvar=lenstr(vname(1,indxShflx))
+          ierr=nf_def_var (ncid, vname(1,indxShflx)(1:lvar),
+     &                             NF_REAL, 3, r2dgrd, hisShflx)
+          ierr=nf_var_par_access(ncid,hisShflx,nf_collective)
+          lvar=lenstr(vname(2,indxShflx))
+          ierr=nf_put_att_text (ncid, hisShflx, 'long_name', lvar,
+     &                                 vname(2,indxShflx)(1:lvar))
+          lvar=lenstr(vname(3,indxShflx))
+          ierr=nf_put_att_text (ncid, hisShflx, 'units',     lvar,
+     &                                 vname(3,indxShflx)(1:lvar))
+          call nf_add_attribute(ncid, hisShflx, vname(:,indxShflx), 5,
+     &                          NF_REAL, ierr)
+        endif
+      if (wrthis(indxShflx_rsw)) then
+        lvar=lenstr(vname(1,indxShflx_rsw))
+        ierr=nf_def_var (ncid, vname(1,indxShflx_rsw)(1:lvar),
+     &                           NF_REAL, 3, r2dgrd, hisShflx_rsw)
+          ierr=nf_var_par_access(ncid,hisShflx_rsw,nf_collective)
+          lvar=lenstr(vname(2,indxShflx_rsw))
+          ierr=nf_put_att_text (ncid, hisShflx_rsw, 'long_name', lvar,
+     &                                 vname(2,indxShflx_rsw)(1:lvar))
+          lvar=lenstr(vname(3,indxShflx_rsw))
+          ierr=nf_put_att_text (ncid, hisShflx_rsw, 'units',     lvar,
+     &                                 vname(3,indxShflx_rsw)(1:lvar))
+        call nf_add_attribute(ncid, hisShflx_rsw,
+     &               vname(:,indxShflx_rsw), 5, NF_REAL, ierr)
+      endif
         ierr=nf_enddef(ncid)
         if (mynode.eq.0) write(stdout,'(6x,4A,1x,A,i4)')
      &                'DEF_HIS/AVG - Created ',
@@ -1872,6 +1956,19 @@
           endif
           ierr=nf_var_par_access(ncid,hisV,nf_collective)
         endif
+        do itrc=1,NT
+          if (wrthis(indxV+itrc)) then
+            lvar=lenstr(vname(1,indxV+itrc))
+            ierr=nf_inq_varid (ncid, vname(1,indxV+itrc)(1:lvar),
+     &                                                 hisT(itrc))
+            if (ierr .ne. nf_noerr) then
+              write(stdout,1) vname(1,indxV+itrc)(1:lvar),
+     &                                       hisname(1:lstr)
+              goto 99
+            endif
+            ierr=nf_var_par_access(ncid,hisT(itrc),nf_collective)
+          endif
+        enddo
         if (wrthis(indxR)) then
           lvar=lenstr(vname(1,indxR))
           ierr=nf_inq_varid (ncid, vname(1,indxR)(1:lvar), hisR)
@@ -1926,6 +2023,15 @@
           endif
           ierr=nf_var_par_access(ncid,hisAkv,nf_collective)
         endif
+        if (wrthis(indxAkt)) then
+          lvar=lenstr(vname(1,indxAkt))
+          ierr=nf_inq_varid (ncid,vname(1,indxAkt)(1:lvar), hisAkt)
+          if (ierr .ne. nf_noerr) then
+            write(stdout,1) vname(1,indxAkt)(1:lvar), hisname(1:lstr)
+            goto 99
+          endif
+          ierr=nf_var_par_access(ncid,hisAkt,nf_collective)
+        endif
         if (wrthis(indxHbl)) then
           lvar=lenstr(vname(1,indxHbl))
           ierr=nf_inq_varid (ncid,vname(1,indxHbl)(1:lvar), hisHbl)
@@ -1961,6 +2067,27 @@
             goto 99
           endif
           ierr=nf_var_par_access(ncid,hisLsc,nf_collective)
+        endif
+        if (wrthis(indxShflx)) then
+          lvar=lenstr(vname(1,indxShflx))
+          ierr=nf_inq_varid (ncid,vname(1,indxShflx)(1:lvar),
+     &                                                   hisShflx)
+          if (ierr .ne. nf_noerr) then
+            write(stdout,1) vname(1,indxShflx)(1:lvar), hisname(1:lstr)
+            goto 99
+          endif
+          ierr=nf_var_par_access(ncid,hisShflx,nf_collective)
+        endif
+        if (wrthis(indxShflx_rsw)) then
+          lvar=lenstr(vname(1,indxShflx_rsw))
+          ierr=nf_inq_varid (ncid,vname(1,indxShflx_rsw)(1:lvar),
+     &                                                hisShflx_rsw)
+          if (ierr .ne. nf_noerr) then
+            write(stdout,1) vname(1,indxShflx_rsw)(1:lvar), 
+     &                                                   hisname(1:lstr)
+            goto 99
+          endif
+          ierr=nf_var_par_access(ncid,hisShflx_rsw,nf_collective)
         endif
       if (mynode.eq.0) write(*,'(6x,2A,i4,1x,A,i4)')
      &                     'DEF_HIS/AVG -- Opened ',
@@ -2029,11 +2156,11 @@
       integer*4   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
       integer*4   ntrc_subs, ntrc_substot
       integer*4   ntrc_mld
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
       parameter (ntrc_bio=0)
       parameter (ntrc_subs=0, ntrc_substot=0)
       parameter (ntrc_sed=0)
@@ -2049,6 +2176,8 @@
       integer*4   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer*4   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer*4   ntrc_diaeddy, ntrc_surf
+     &          , itpas
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
       parameter (ntrc_diabio=0)
       parameter (ntrc_diats=0)
       parameter (ntrc_diauv=0)
@@ -2072,6 +2201,7 @@
       real  theta_s,   theta_b,   Tcline,  hc
       real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
       real  rx0, rx1
+      real  tnu2(NT),tnu4(NT)
       real R0,T0,S0, Tcoef, Scoef
       real weight(6,0:NWEIGHT)
       real  x_sponge,   v_sponge
@@ -2083,6 +2213,7 @@
       integer*4 ntsdiags_eddy_avg, nwrtdiags_eddy_avg
       integer*4 nsta, nrpfsta
       logical ldefhis
+      logical got_tini(NT)
       logical ldefdiags_eddy
       logical ldefdiags_eddy_avg
       logical ldefsta
@@ -2093,6 +2224,7 @@
      &           , theta_s,   theta_b,   Tcline,  hc
      &           , sc_w,      Cs_w,      sc_r,    Cs_r
      &           , rx0,       rx1
+     &           ,       tnu2,    tnu4
      &                      , R0,T0,S0,  Tcoef,   Scoef
      &                      , weight
      &                      , x_sponge,   v_sponge
@@ -2101,6 +2233,7 @@
      &      , nfast,  nrrec,     nrst,    nwrt
      &                                 , ntsavg,  navg
      &                      , nsta, nrpfsta
+     &                      , got_tini
      &                      , ldefdiags_eddy, nwrtdiags_eddy
      &                      , ldefdiags_eddy_avg
      &                      , nwrtdiags_eddy_avg
@@ -2109,6 +2242,8 @@
      &                      , ldefhis
       real Akv_bak
       common /scalars_akv/ Akv_bak
+      real Akt_bak(NT)
+      common /scalars_akt/ Akt_bak
       logical synchro_flag
       common /sync_flag/ synchro_flag
       integer*4 may_day_flag
@@ -2180,6 +2315,11 @@
       parameter (indxTime=1, indxZ=2, indxUb=3, indxVb=4)
       integer*4 indxU, indxV
       parameter (indxU=6, indxV=7)
+      integer*4 indxT
+      parameter (indxT=indxV+1)
+      integer*4, dimension(ntrc_pas) :: indxTPAS
+     & =(/(iloop,iloop=indxV+ntrc_temp+ntrc_salt+ntrc_mld+1,
+     &  indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas)/)
       integer*4 indxBSD, indxBSS
       parameter (indxBSD=indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas+
      &           ntrc_bio+1,
@@ -2269,9 +2409,12 @@
      &     , ncidqbar, ncidbtf
      &     , ntsrf,  ntssh,  ntsst, ntsss, ntuclm
      &     , ntbulk, ntqbar, ntww
+      integer*4 nttclm(NT), ntstf(NT), nttsrc(NT)
+     &       , ntbtf(NT)
       integer*4 ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+      integer*4 rstT(NT)
       integer*4 rstAkv,rstAkt
       integer*4 rstTke,rstGls
       integer*4 rstBustr, rstBvstr
@@ -2306,6 +2449,7 @@
      &      , avgAkv, avgAkt, avgAks
      &      , avgbvf
      &      , avgTke, avgGls, avgLsc
+      integer*4 avgT(NT)
        integer*4 nciddiags_eddy_avg, nrecdiags_eddy_avg
      &      , nrpfdiags_eddy_avg
      &      , diags_eddyTime_avg, diags_eddyTime2_avg
@@ -2327,9 +2471,11 @@
      &     ncidfrc, ncidbulk,ncidclm, ncidqbar, ncidbtf
      &     , ntsms, ntsrf, ntssh, ntsst
      &     , ntuclm, ntsss, ntbulk, ntqbar, ntww
+     &     ,  nttclm, ntstf, nttsrc, ntbtf
      &      , ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+     & ,   rstT
      &      , rstAkv,rstAkt
      &      , rstTke,rstGls
      &      , rstBustr,rstBvstr
@@ -2372,6 +2518,7 @@
      &      , avgShflx, avgSwflx, avgShflx_rsw
      &      , avgBhflx, avgBwflx
      &      , avgU,    avgV
+     &      ,     avgT
      &      ,     avgR
      &      , avgO,    avgW,     avgVisc,  avgDiff
      &      , avgAkv,  avgAkt,   avgAks
@@ -3444,6 +3591,26 @@
           call nf_add_attribute(ncid, avgV, vname(:,indxV),
      &         5, NF_REAL, ierr)
         endif
+        do itrc=1,NT
+          if (wrtavg(indxV+itrc)) then
+            lvar=lenstr(vname(1,indxV+itrc))
+            ierr=nf_def_var (ncid, vname(1,indxV+itrc)(1:lvar),
+     &                             NF_REAL, 4, r3dgrd, avgT(itrc))
+          ierr=nf_var_par_access(ncid,avgT(itrc),nf_collective)
+            text='averaged '/ /vname(2,indxV+itrc)
+            lvar=lenstr(text)
+            ierr=nf_put_att_text (ncid, avgT(itrc), 'long_name',
+     &                                          lvar, text(1:lvar))
+            lvar=lenstr(vname(3,indxV+itrc))
+            ierr=nf_put_att_text (ncid, avgT(itrc), 'units', lvar,
+     &                               vname(3,indxV+itrc)(1:lvar))
+            lvar=lenstr(vname(4,indxV+itrc))
+            ierr=nf_put_att_text (ncid, avgT(itrc), 'field', lvar,
+     &                               vname(4,indxV+itrc)(1:lvar))
+            call nf_add_attribute(ncid,avgT(itrc),vname(:,indxV+itrc),5,
+     &           NF_REAL, ierr)
+          endif
+        enddo
         if (wrtavg(indxR)) then
           lvar=lenstr(vname(1,indxR))
           ierr=nf_def_var (ncid, vname(1,indxR)(1:lvar),
@@ -3642,6 +3809,24 @@
           call nf_add_attribute(ncid, avgAkv, vname(:,indxAkv),
      &                          5, NF_REAL, ierr)
         endif
+        if (wrtavg(indxAkt)) then
+          lvar=lenstr(vname(1,indxAkt))
+          ierr=nf_def_var (ncid, vname(1,indxAkt)(1:lvar),
+     &                              NF_REAL, 4, w3dgrd, avgAkt)
+          ierr=nf_var_par_access(ncid,avgAkt,nf_collective)
+          text='averaged '/ /vname(2,indxAkt)
+          lvar=lenstr(text)
+          ierr=nf_put_att_text (ncid, avgAkt, 'long_name', lvar,
+     &                                              text(1:lvar))
+          lvar=lenstr(vname(3,indxAkt))
+          ierr=nf_put_att_text (ncid, avgAkt, 'units',     lvar,
+     &                                  vname(3,indxAkt)(1:lvar))
+          lvar=lenstr(vname(4,indxAkt))
+          ierr=nf_put_att_text (ncid, avgAkt, 'field',     lvar,
+     &                                  vname(4,indxAkt)(1:lvar))
+          call nf_add_attribute(ncid, avgAkt, vname(:,indxAkt),
+     &                           5, NF_REAL, ierr)
+        endif
         if (wrtavg(indxHbl)) then
           lvar=lenstr(vname(1,indxHbl))
           ierr=nf_def_var (ncid, vname(1,indxHbl)(1:lvar),
@@ -3714,6 +3899,36 @@
           call nf_add_attribute(ncid, avgLsc, vname(:,indxLsc),
      &                          5, NF_REAL, ierr)
         endif
+        if (wrtavg(indxShflx)) then
+          lvar=lenstr(vname(1,indxShflx))
+          ierr=nf_def_var (ncid, vname(1,indxShflx)(1:lvar),
+     &                             NF_REAL, 3, r2dgrd, avgShflx)
+          ierr=nf_var_par_access(ncid,avgShflx,nf_collective)
+          text='averaged '/ /vname(2,indxShflx)
+          lvar=lenstr(text)
+          ierr=nf_put_att_text (ncid, avgShflx, 'long_name', lvar,
+     &                                               text(1:lvar))
+          lvar=lenstr(vname(3,indxShflx))
+          ierr=nf_put_att_text (ncid, avgShflx, 'units',     lvar,
+     &                                 vname(3,indxShflx)(1:lvar))
+          call nf_add_attribute(ncid, avgShflx, vname(:,indxShflx), 5,
+     &                          NF_REAL, ierr)
+        endif
+      if (wrtavg(indxShflx_rsw)) then
+        lvar=lenstr(vname(1,indxShflx_rsw))
+        ierr=nf_def_var (ncid, vname(1,indxShflx_rsw)(1:lvar),
+     &                           NF_REAL, 3, r2dgrd, avgShflx_rsw)
+          ierr=nf_var_par_access(ncid,avgShflx_rsw,nf_collective)
+          text='averaged '/ /vname(2,indxShflx_rsw)
+          lvar=lenstr(text)
+          ierr=nf_put_att_text (ncid, avgShflx_rsw, 'long_name', lvar,
+     &                                               text(1:lvar))
+          lvar=lenstr(vname(3,indxShflx_rsw))
+          ierr=nf_put_att_text (ncid, avgShflx_rsw, 'units',     lvar,
+     &                                 vname(3,indxShflx_rsw)(1:lvar))
+        call nf_add_attribute(ncid, avgShflx_rsw,
+     &               vname(:,indxShflx_rsw), 5, NF_REAL, ierr)
+      endif
         ierr=nf_enddef(ncid)
         if (mynode.eq.0) write(stdout,'(6x,4A,1x,A,i4)')
      &                'DEF_HIS/AVG - Created ',
@@ -3874,6 +4089,19 @@
           endif
           ierr=nf_var_par_access(ncid,avgV,nf_collective)
         endif
+        do itrc=1,NT
+          if (wrtavg(indxV+itrc)) then
+            lvar=lenstr(vname(1,indxV+itrc))
+            ierr=nf_inq_varid (ncid, vname(1,indxV+itrc)(1:lvar),
+     &                                                 avgT(itrc))
+            if (ierr .ne. nf_noerr) then
+              write(stdout,1) vname(1,indxV+itrc)(1:lvar),
+     &                                       avgname(1:lstr)
+              goto 99
+            endif
+            ierr=nf_var_par_access(ncid,avgT(itrc),nf_collective)
+          endif
+        enddo
         if (wrtavg(indxR)) then
           lvar=lenstr(vname(1,indxR))
           ierr=nf_inq_varid (ncid, vname(1,indxR)(1:lvar), avgR)
@@ -3928,6 +4156,15 @@
           endif
           ierr=nf_var_par_access(ncid,avgAkv,nf_collective)
         endif
+        if (wrtavg(indxAkt)) then
+          lvar=lenstr(vname(1,indxAkt))
+          ierr=nf_inq_varid (ncid,vname(1,indxAkt)(1:lvar), avgAkt)
+          if (ierr .ne. nf_noerr) then
+            write(stdout,1) vname(1,indxAkt)(1:lvar), avgname(1:lstr)
+            goto 99
+          endif
+          ierr=nf_var_par_access(ncid,avgAkt,nf_collective)
+        endif
         if (wrtavg(indxHbl)) then
           lvar=lenstr(vname(1,indxHbl))
           ierr=nf_inq_varid (ncid,vname(1,indxHbl)(1:lvar), avgHbl)
@@ -3963,6 +4200,27 @@
             goto 99
           endif
           ierr=nf_var_par_access(ncid,avgLsc,nf_collective)
+        endif
+        if (wrtavg(indxShflx)) then
+          lvar=lenstr(vname(1,indxShflx))
+          ierr=nf_inq_varid (ncid,vname(1,indxShflx)(1:lvar),
+     &                                                   avgShflx)
+          if (ierr .ne. nf_noerr) then
+            write(stdout,1) vname(1,indxShflx)(1:lvar), avgname(1:lstr)
+            goto 99
+          endif
+          ierr=nf_var_par_access(ncid,avgShflx,nf_collective)
+        endif
+        if (wrtavg(indxShflx_rsw)) then
+          lvar=lenstr(vname(1,indxShflx_rsw))
+          ierr=nf_inq_varid (ncid,vname(1,indxShflx_rsw)(1:lvar),
+     &                                                avgShflx_rsw)
+          if (ierr .ne. nf_noerr) then
+            write(stdout,1) vname(1,indxShflx_rsw)(1:lvar), 
+     &                                                   avgname(1:lstr)
+            goto 99
+          endif
+          ierr=nf_var_par_access(ncid,avgShflx_rsw,nf_collective)
         endif
       if (mynode.eq.0) write(*,'(6x,2A,i4,1x,A,i4)')
      &                     'DEF_HIS/AVG -- Opened ',

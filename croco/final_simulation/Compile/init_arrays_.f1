@@ -38,18 +38,29 @@
 
 ! PROCESSES:
 
-! MR only (no longshore current)
-! TRC+ (no longshore current)
-! +SW (longshore current)
-! TRC++SW (longshore current)
+! Vertical shear (VS) only
+! Short-Crested waves (SC) only
+!  and SC
+!  and Longshore Drift (LD)
+! , LD and SC
+
+! Tracer is active or not
 
 ! Point source release if active, longshore uniform else
 
 
+! When only , need for a perturbation 
+! to trigger the instability
 
+! VSSC
 
+! SC
 
-!# define BSTRESS_FAST
+! VSLD
+
+! VSLDSC
+
+!# define GLS_KOMEGA
 ! Common bathymetry:
 !# define CLARK 
 ! Case specific bathymetry
@@ -387,11 +398,12 @@
       integer   ntrc_subs, ntrc_substot
       integer   ntrc_mld
 !
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
+!======================================================================
       parameter (ntrc_bio=0)
 
 
@@ -429,6 +441,7 @@
       integer   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer   ntrc_diaeddy, ntrc_surf
+     &          , itpas
 !
 
 
@@ -436,6 +449,7 @@
 ! ================  Parameters  =====================
 !
 
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
 
 !
 ! ===  BIOLOGY  ===
@@ -660,11 +674,12 @@ C$    integer omp_get_thread_num
       integer   ntrc_subs, ntrc_substot
       integer   ntrc_mld
 !
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
+!======================================================================
       parameter (ntrc_bio=0)
 
 
@@ -702,6 +717,7 @@ C$    integer omp_get_thread_num
       integer   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer   ntrc_diaeddy, ntrc_surf
+     &          , itpas
 !
 
 
@@ -709,6 +725,7 @@ C$    integer omp_get_thread_num
 ! ================  Parameters  =====================
 !
 
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
 
 !
 ! ===  BIOLOGY  ===
@@ -921,6 +938,14 @@ C$    integer omp_get_thread_num
       integer indxU, indxV
       parameter (indxU=6, indxV=7)
 
+      integer indxT
+      parameter (indxT=indxV+1)
+
+
+
+      integer, dimension(ntrc_pas) :: indxTPAS
+     & =(/(iloop,iloop=indxV+ntrc_temp+ntrc_salt+ntrc_mld+1,
+     &  indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas)/)
 
       integer indxBSD, indxBSS
       parameter (indxBSD=indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas+
@@ -1109,9 +1134,12 @@ C$    integer omp_get_thread_num
      &     , ntsrf,  ntssh,  ntsst, ntsss, ntuclm
      &     , ntbulk, ntqbar, ntww
 
+      integer nttclm(NT), ntstf(NT), nttsrc(NT)
+     &       , ntbtf(NT)
       integer ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+      integer rstT(NT)
       integer rstAkv,rstAkt
       integer rstTke,rstGls
       integer rstBustr, rstBvstr
@@ -1154,6 +1182,7 @@ C$    integer omp_get_thread_num
      &      , avgbvf
      &      , avgTke, avgGls, avgLsc
 
+      integer avgT(NT)
 
 
 
@@ -1183,9 +1212,12 @@ C$    integer omp_get_thread_num
      &     , ntsms, ntsrf, ntssh, ntsst
      &     , ntuclm, ntsss, ntbulk, ntqbar, ntww
 
+     &     ,  nttclm, ntstf, nttsrc, ntbtf
+
      &      , ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+     & ,   rstT
      &      , rstAkv,rstAkt
      &      , rstTke,rstGls
      &      , rstBustr,rstBvstr
@@ -1230,6 +1262,7 @@ C$    integer omp_get_thread_num
      &      , avgShflx, avgSwflx, avgShflx_rsw
      &      , avgBhflx, avgBwflx
      &      , avgU,    avgV
+     &      ,     avgT
      &      ,     avgR
      &      , avgO,    avgW,     avgVisc,  avgDiff
      &      , avgAkv,  avgAkt,   avgAks
@@ -1621,6 +1654,16 @@ C$    integer omp_get_thread_num
 !
       real stflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E,NT)
       common /forces_stflx/stflx
+!
+!  BOTTOM TRACER FLUXES:
+!--------------------------------------------------------------------
+!  btflx  Kinematic bottom fluxes of tracer type variables at
+!         horizontal RHO-points. Physical dimensions [degC m/s] -
+!         temperature; [PSU m/s] - salinity.
+!
+      real btflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E,NT)
+      common /forces_btflx/btflx
+
 
 
 !
@@ -1890,6 +1933,7 @@ C$    integer omp_get_thread_num
       real  theta_s,   theta_b,   Tcline,  hc
       real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
       real  rx0, rx1
+      real  tnu2(NT),tnu4(NT)
       real R0,T0,S0, Tcoef, Scoef
       real weight(6,0:NWEIGHT)
 
@@ -1903,6 +1947,7 @@ C$    integer omp_get_thread_num
       integer nsta, nrpfsta
 
       logical ldefhis
+      logical got_tini(NT)
       logical ldefdiags_eddy
       logical ldefdiags_eddy_avg
       logical ldefsta
@@ -1914,6 +1959,7 @@ C$    integer omp_get_thread_num
      &           , theta_s,   theta_b,   Tcline,  hc
      &           , sc_w,      Cs_w,      sc_r,    Cs_r
      &           , rx0,       rx1
+     &           ,       tnu2,    tnu4
      &                      , R0,T0,S0,  Tcoef,   Scoef
      &                      , weight
      &                      , x_sponge,   v_sponge
@@ -1922,6 +1968,7 @@ C$    integer omp_get_thread_num
      &      , nfast,  nrrec,     nrst,    nwrt
      &                                 , ntsavg,  navg
      &                      , nsta, nrpfsta
+     &                      , got_tini
      &                      , ldefdiags_eddy, nwrtdiags_eddy
      &                      , ldefdiags_eddy_avg
      &                      , nwrtdiags_eddy_avg
@@ -1931,6 +1978,8 @@ C$    integer omp_get_thread_num
 
       real Akv_bak
       common /scalars_akv/ Akv_bak
+      real Akt_bak(NT)
+      common /scalars_akt/ Akt_bak
 !
 !-----------------------------------------------------------------------
 ! This following common block contains a set of globally accessable
@@ -2511,6 +2560,18 @@ CSDISTRIBUTE_RESHAPE eddyvgsv_avg(BLOCK_PATTERN,*) BLOCK_CLAUSE
         enddo
       enddo
 
+      do itrc=1,NT
+        got_tini(itrc)=.false.
+        do k=1,N
+          do j=JstrR,JendR
+            do i=IstrR,IendR
+              t(i,j,k,1,itrc)=init
+              t(i,j,k,2,itrc)=init
+              t_avg(i,j,k,itrc)=init
+            enddo
+          enddo
+        enddo
+      enddo
 
 
 
@@ -2567,6 +2628,16 @@ CSDISTRIBUTE_RESHAPE eddyvgsv_avg(BLOCK_PATTERN,*) BLOCK_CLAUSE
           bvstrg(i,j,2)=init
         enddo
       enddo
+      do itrc=1,NT
+        do j=JstrR,JendR
+          do i=IstrR,IendR
+            stflx(i,j,itrc)=init
+            stflx_avg(i,j,itrc)=init
+            btflx(i,j,itrc)=init
+
+          enddo
+        enddo
+      enddo
       do j=JstrR,JendR
         do i=IstrR,IendR
 !
@@ -2595,6 +2666,9 @@ CSDISTRIBUTE_RESHAPE eddyvgsv_avg(BLOCK_PATTERN,*) BLOCK_CLAUSE
           do j=JstrR,JendR
             ubry_west(j,k)=init
             vbry_west(j,k)=init
+            do itrc=1,NT
+              tbry_west(j,k,itrc)=init
+            enddo
           enddo
         enddo
       endif
@@ -2621,6 +2695,18 @@ CSDISTRIBUTE_RESHAPE eddyvgsv_avg(BLOCK_PATTERN,*) BLOCK_CLAUSE
             enddo
           enddo
         enddo
+        do itrc=1,NT
+          do j=JstrR,JendR
+            do i=IstrR,IendR
+              diff2(i,j,itrc)=tnu2(itrc)
+            enddo
+          enddo
+        enddo
+          do j=JstrR,JendR
+            do i=IstrR,IendR
+              diff2_sponge(i,j)=init
+            enddo
+          enddo
 !
 !  Initialize vertical mixing coefficients (see "mixing.h") to their
 !  background values. If no vertical closure scheme is selected, the
@@ -2636,6 +2722,7 @@ CSDISTRIBUTE_RESHAPE eddyvgsv_avg(BLOCK_PATTERN,*) BLOCK_CLAUSE
         enddo
         do j=JstrR,JendR
           do i=IstrR,IendR
+              Akt(i,j,k,itemp)=init
           enddo
         enddo
       enddo

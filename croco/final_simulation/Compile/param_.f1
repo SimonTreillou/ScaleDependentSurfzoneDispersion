@@ -28,18 +28,29 @@
 
 ! PROCESSES:
 
-! MR only (no longshore current)
-! TRC+ (no longshore current)
-! +SW (longshore current)
-! TRC++SW (longshore current)
+! Vertical shear (VS) only
+! Short-Crested waves (SC) only
+!  and SC
+!  and Longshore Drift (LD)
+! , LD and SC
+
+! Tracer is active or not
 
 ! Point source release if active, longshore uniform else
 
 
+! When only , need for a perturbation 
+! to trigger the instability
 
+! VSSC
 
+! SC
 
-!# define BSTRESS_FAST
+! VSLD
+
+! VSLDSC
+
+!# define GLS_KOMEGA
 ! Common bathymetry:
 !# define CLARK 
 ! Case specific bathymetry
@@ -375,11 +386,12 @@
       integer   ntrc_subs, ntrc_substot
       integer   ntrc_mld
 !
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
+!======================================================================
       parameter (ntrc_bio=0)
 
 
@@ -417,6 +429,7 @@
       integer   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer   ntrc_diaeddy, ntrc_surf
+     &          , itpas
 !
 
 
@@ -424,6 +437,7 @@
 ! ================  Parameters  =====================
 !
 
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
 
 !
 ! ===  BIOLOGY  ===

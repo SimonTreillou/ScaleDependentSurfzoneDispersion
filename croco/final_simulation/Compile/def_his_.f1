@@ -38,18 +38,29 @@
 
 ! PROCESSES:
 
-! MR only (no longshore current)
-! TRC+ (no longshore current)
-! +SW (longshore current)
-! TRC++SW (longshore current)
+! Vertical shear (VS) only
+! Short-Crested waves (SC) only
+!  and SC
+!  and Longshore Drift (LD)
+! , LD and SC
+
+! Tracer is active or not
 
 ! Point source release if active, longshore uniform else
 
 
+! When only , need for a perturbation 
+! to trigger the instability
 
+! VSSC
 
+! SC
 
-!# define BSTRESS_FAST
+! VSLD
+
+! VSLDSC
+
+!# define GLS_KOMEGA
 ! Common bathymetry:
 !# define CLARK 
 ! Case specific bathymetry
@@ -414,11 +425,12 @@
       integer   ntrc_subs, ntrc_substot
       integer   ntrc_mld
 !
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
+!======================================================================
       parameter (ntrc_bio=0)
 
 
@@ -456,6 +468,7 @@
       integer   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer   ntrc_diaeddy, ntrc_surf
+     &          , itpas
 !
 
 
@@ -463,6 +476,7 @@
 ! ================  Parameters  =====================
 !
 
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
 
 !
 ! ===  BIOLOGY  ===
@@ -621,6 +635,7 @@
       real  theta_s,   theta_b,   Tcline,  hc
       real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
       real  rx0, rx1
+      real  tnu2(NT),tnu4(NT)
       real R0,T0,S0, Tcoef, Scoef
       real weight(6,0:NWEIGHT)
 
@@ -634,6 +649,7 @@
       integer nsta, nrpfsta
 
       logical ldefhis
+      logical got_tini(NT)
       logical ldefdiags_eddy
       logical ldefdiags_eddy_avg
       logical ldefsta
@@ -645,6 +661,7 @@
      &           , theta_s,   theta_b,   Tcline,  hc
      &           , sc_w,      Cs_w,      sc_r,    Cs_r
      &           , rx0,       rx1
+     &           ,       tnu2,    tnu4
      &                      , R0,T0,S0,  Tcoef,   Scoef
      &                      , weight
      &                      , x_sponge,   v_sponge
@@ -653,6 +670,7 @@
      &      , nfast,  nrrec,     nrst,    nwrt
      &                                 , ntsavg,  navg
      &                      , nsta, nrpfsta
+     &                      , got_tini
      &                      , ldefdiags_eddy, nwrtdiags_eddy
      &                      , ldefdiags_eddy_avg
      &                      , nwrtdiags_eddy_avg
@@ -662,6 +680,8 @@
 
       real Akv_bak
       common /scalars_akv/ Akv_bak
+      real Akt_bak(NT)
+      common /scalars_akt/ Akt_bak
 !
 !-----------------------------------------------------------------------
 ! This following common block contains a set of globally accessable
@@ -958,6 +978,14 @@
       integer indxU, indxV
       parameter (indxU=6, indxV=7)
 
+      integer indxT
+      parameter (indxT=indxV+1)
+
+
+
+      integer, dimension(ntrc_pas) :: indxTPAS
+     & =(/(iloop,iloop=indxV+ntrc_temp+ntrc_salt+ntrc_mld+1,
+     &  indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas)/)
 
       integer indxBSD, indxBSS
       parameter (indxBSD=indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas+
@@ -1146,9 +1174,12 @@
      &     , ntsrf,  ntssh,  ntsst, ntsss, ntuclm
      &     , ntbulk, ntqbar, ntww
 
+      integer nttclm(NT), ntstf(NT), nttsrc(NT)
+     &       , ntbtf(NT)
       integer ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+      integer rstT(NT)
       integer rstAkv,rstAkt
       integer rstTke,rstGls
       integer rstBustr, rstBvstr
@@ -1191,6 +1222,7 @@
      &      , avgbvf
      &      , avgTke, avgGls, avgLsc
 
+      integer avgT(NT)
 
 
 
@@ -1220,9 +1252,12 @@
      &     , ntsms, ntsrf, ntssh, ntsst
      &     , ntuclm, ntsss, ntbulk, ntqbar, ntww
 
+     &     ,  nttclm, ntstf, nttsrc, ntbtf
+
      &      , ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+     & ,   rstT
      &      , rstAkv,rstAkt
      &      , rstTke,rstGls
      &      , rstBustr,rstBvstr
@@ -1267,6 +1302,7 @@
      &      , avgShflx, avgSwflx, avgShflx_rsw
      &      , avgBhflx, avgBwflx
      &      , avgU,    avgV
+     &      ,     avgT
      &      ,     avgR
      &      , avgO,    avgW,     avgVisc,  avgDiff
      &      , avgAkv,  avgAkt,   avgAks
@@ -3425,6 +3461,27 @@
 ! Tracer variables.
 !-----------------------------------------------------------------------
 !
+        do itrc=1,NT
+          if (wrthis(indxV+itrc)) then
+            lvar=lenstr(vname(1,indxV+itrc))
+            ierr=nf_def_var (ncid, vname(1,indxV+itrc)(1:lvar),
+     &                             NF_REAL, 4, r3dgrd, hisT(itrc))
+          ierr=nf_var_par_access(ncid,hisT(itrc),nf_collective)
+            lvar=lenstr(vname(2,indxV+itrc))
+            ierr=nf_put_att_text (ncid, hisT(itrc), 'long_name',
+     &                         lvar, vname(2,indxV+itrc)(1:lvar))
+            lvar=lenstr(vname(3,indxV+itrc))
+            ierr=nf_put_att_text (ncid, hisT(itrc), 'units', lvar,
+     &                               vname(3,indxV+itrc)(1:lvar))
+            lvar=lenstr(vname(4,indxV+itrc))
+            ierr=nf_put_att_text (ncid, hisT(itrc), 'field', lvar,
+     &                               vname(4,indxV+itrc)(1:lvar))
+
+            call nf_add_attribute(ncid,hisT(itrc),vname(:,indxV+itrc),5,
+     &           NF_REAL, ierr)
+          endif
+
+        enddo
 !
 !-----------------------------------------------------------------------
 ! Density anomaly.
@@ -3676,6 +3733,24 @@
 !
 ! Vertical diffusion coefficient for potential temperature.
 !
+        if (wrthis(indxAkt)) then
+          lvar=lenstr(vname(1,indxAkt))
+          ierr=nf_def_var (ncid, vname(1,indxAkt)(1:lvar),
+     &                              NF_REAL, 4, w3dgrd, hisAkt)
+          ierr=nf_var_par_access(ncid,hisAkt,nf_collective)
+          lvar=lenstr(vname(2,indxAkt))
+          ierr=nf_put_att_text (ncid, hisAkt, 'long_name', lvar,
+     &                                  vname(2,indxAkt)(1:lvar))
+          lvar=lenstr(vname(3,indxAkt))
+          ierr=nf_put_att_text (ncid, hisAkt, 'units',     lvar,
+     &                                  vname(3,indxAkt)(1:lvar))
+          lvar=lenstr(vname(4,indxAkt))
+          ierr=nf_put_att_text (ncid, hisAkt, 'field',     lvar,
+     &                                  vname(4,indxAkt)(1:lvar))
+
+          call nf_add_attribute(ncid, hisAkt, vname(:,indxAkt), 
+     &                           5, NF_REAL, ierr)
+        endif
 
 
 !
@@ -3767,6 +3842,21 @@
 !
 ! Shflx [W/m2]
 !
+        if (wrthis(indxShflx)) then
+          lvar=lenstr(vname(1,indxShflx))
+          ierr=nf_def_var (ncid, vname(1,indxShflx)(1:lvar),
+     &                             NF_REAL, 3, r2dgrd, hisShflx)
+          ierr=nf_var_par_access(ncid,hisShflx,nf_collective)
+          lvar=lenstr(vname(2,indxShflx))
+          ierr=nf_put_att_text (ncid, hisShflx, 'long_name', lvar,
+     &                                 vname(2,indxShflx)(1:lvar))
+          lvar=lenstr(vname(3,indxShflx))
+          ierr=nf_put_att_text (ncid, hisShflx, 'units',     lvar,
+     &                                 vname(3,indxShflx)(1:lvar))
+
+          call nf_add_attribute(ncid, hisShflx, vname(:,indxShflx), 5,
+     &                          NF_REAL, ierr)
+        endif
 !
 ! Swflx [cm/day]
 !
@@ -3775,6 +3865,22 @@
 !
 ! Short wave Shflx_rsw [W/m2]
 !
+      if (wrthis(indxShflx_rsw)) then
+        lvar=lenstr(vname(1,indxShflx_rsw))
+        ierr=nf_def_var (ncid, vname(1,indxShflx_rsw)(1:lvar),
+     &                           NF_REAL, 3, r2dgrd, hisShflx_rsw)
+          ierr=nf_var_par_access(ncid,hisShflx_rsw,nf_collective)
+          lvar=lenstr(vname(2,indxShflx_rsw))
+          ierr=nf_put_att_text (ncid, hisShflx_rsw, 'long_name', lvar,
+     &                                 vname(2,indxShflx_rsw)(1:lvar))
+          lvar=lenstr(vname(3,indxShflx_rsw))
+          ierr=nf_put_att_text (ncid, hisShflx_rsw, 'units',     lvar,
+     &                                 vname(3,indxShflx_rsw)(1:lvar))
+
+        call nf_add_attribute(ncid, hisShflx_rsw, 
+     &               vname(:,indxShflx_rsw), 5, NF_REAL, ierr)
+
+      endif
 
 
 
@@ -4025,6 +4131,19 @@
 !
 ! Tracer variables.
 !
+        do itrc=1,NT
+          if (wrthis(indxV+itrc)) then
+            lvar=lenstr(vname(1,indxV+itrc))
+            ierr=nf_inq_varid (ncid, vname(1,indxV+itrc)(1:lvar),
+     &                                                 hisT(itrc))
+            if (ierr .ne. nf_noerr) then
+              write(stdout,1) vname(1,indxV+itrc)(1:lvar),
+     &                                       hisname(1:lstr)
+              goto 99                                     !--> ERROR
+            endif
+            ierr=nf_var_par_access(ncid,hisT(itrc),nf_collective)
+          endif
+        enddo
 !
 ! Density anomaly.
 !
@@ -4104,6 +4223,15 @@
 !
 ! Vertical diffusion coefficient for potential temperature.
 !
+        if (wrthis(indxAkt)) then
+          lvar=lenstr(vname(1,indxAkt))
+          ierr=nf_inq_varid (ncid,vname(1,indxAkt)(1:lvar), hisAkt)
+          if (ierr .ne. nf_noerr) then
+            write(stdout,1) vname(1,indxAkt)(1:lvar), hisname(1:lstr)
+            goto 99                                       !--> ERROR
+          endif
+          ierr=nf_var_par_access(ncid,hisAkt,nf_collective)
+        endif
 
 
 
@@ -4160,10 +4288,30 @@
 !
 ! Shflx     Surface net heat flux [W/m2]
 !
+        if (wrthis(indxShflx)) then
+          lvar=lenstr(vname(1,indxShflx))
+          ierr=nf_inq_varid (ncid,vname(1,indxShflx)(1:lvar),
+     &                                                   hisShflx)
+          if (ierr .ne. nf_noerr) then
+            write(stdout,1) vname(1,indxShflx)(1:lvar), hisname(1:lstr)
+            goto 99                                       !--> ERROR
+          endif
+          ierr=nf_var_par_access(ncid,hisShflx,nf_collective)
+        endif
 
 !
 ! Shflx     Surface shortwave radiation [W/m2]
 !
+        if (wrthis(indxShflx_rsw)) then
+          lvar=lenstr(vname(1,indxShflx_rsw))
+          ierr=nf_inq_varid (ncid,vname(1,indxShflx_rsw)(1:lvar),
+     &                                                hisShflx_rsw)
+          if (ierr .ne. nf_noerr) then
+            write(stdout,1) vname(1,indxShflx_rsw)(1:lvar), hisname(1:lstr)
+            goto 99                                       !--> ERROR
+          endif
+          ierr=nf_var_par_access(ncid,hisShflx_rsw,nf_collective)
+        endif
 !
 !
 !-----------------------------------------------------------------------
@@ -4385,11 +4533,12 @@
       integer   ntrc_subs, ntrc_substot
       integer   ntrc_mld
 !
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
+!======================================================================
       parameter (ntrc_bio=0)
 
 
@@ -4427,6 +4576,7 @@
       integer   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer   ntrc_diaeddy, ntrc_surf
+     &          , itpas
 !
 
 
@@ -4434,6 +4584,7 @@
 ! ================  Parameters  =====================
 !
 
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
 
 !
 ! ===  BIOLOGY  ===
@@ -4592,6 +4743,7 @@
       real  theta_s,   theta_b,   Tcline,  hc
       real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
       real  rx0, rx1
+      real  tnu2(NT),tnu4(NT)
       real R0,T0,S0, Tcoef, Scoef
       real weight(6,0:NWEIGHT)
 
@@ -4605,6 +4757,7 @@
       integer nsta, nrpfsta
 
       logical ldefhis
+      logical got_tini(NT)
       logical ldefdiags_eddy
       logical ldefdiags_eddy_avg
       logical ldefsta
@@ -4616,6 +4769,7 @@
      &           , theta_s,   theta_b,   Tcline,  hc
      &           , sc_w,      Cs_w,      sc_r,    Cs_r
      &           , rx0,       rx1
+     &           ,       tnu2,    tnu4
      &                      , R0,T0,S0,  Tcoef,   Scoef
      &                      , weight
      &                      , x_sponge,   v_sponge
@@ -4624,6 +4778,7 @@
      &      , nfast,  nrrec,     nrst,    nwrt
      &                                 , ntsavg,  navg
      &                      , nsta, nrpfsta
+     &                      , got_tini
      &                      , ldefdiags_eddy, nwrtdiags_eddy
      &                      , ldefdiags_eddy_avg
      &                      , nwrtdiags_eddy_avg
@@ -4633,6 +4788,8 @@
 
       real Akv_bak
       common /scalars_akv/ Akv_bak
+      real Akt_bak(NT)
+      common /scalars_akt/ Akt_bak
 !
 !-----------------------------------------------------------------------
 ! This following common block contains a set of globally accessable
@@ -4929,6 +5086,14 @@
       integer indxU, indxV
       parameter (indxU=6, indxV=7)
 
+      integer indxT
+      parameter (indxT=indxV+1)
+
+
+
+      integer, dimension(ntrc_pas) :: indxTPAS
+     & =(/(iloop,iloop=indxV+ntrc_temp+ntrc_salt+ntrc_mld+1,
+     &  indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas)/)
 
       integer indxBSD, indxBSS
       parameter (indxBSD=indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas+
@@ -5117,9 +5282,12 @@
      &     , ntsrf,  ntssh,  ntsst, ntsss, ntuclm
      &     , ntbulk, ntqbar, ntww
 
+      integer nttclm(NT), ntstf(NT), nttsrc(NT)
+     &       , ntbtf(NT)
       integer ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+      integer rstT(NT)
       integer rstAkv,rstAkt
       integer rstTke,rstGls
       integer rstBustr, rstBvstr
@@ -5162,6 +5330,7 @@
      &      , avgbvf
      &      , avgTke, avgGls, avgLsc
 
+      integer avgT(NT)
 
 
 
@@ -5191,9 +5360,12 @@
      &     , ntsms, ntsrf, ntssh, ntsst
      &     , ntuclm, ntsss, ntbulk, ntqbar, ntww
 
+     &     ,  nttclm, ntstf, nttsrc, ntbtf
+
      &      , ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+     & ,   rstT
      &      , rstAkv,rstAkt
      &      , rstTke,rstGls
      &      , rstBustr,rstBvstr
@@ -5238,6 +5410,7 @@
      &      , avgShflx, avgSwflx, avgShflx_rsw
      &      , avgBhflx, avgBwflx
      &      , avgU,    avgV
+     &      ,     avgT
      &      ,     avgR
      &      , avgO,    avgW,     avgVisc,  avgDiff
      &      , avgAkv,  avgAkt,   avgAks
@@ -7404,6 +7577,28 @@
 ! Tracer variables.
 !-----------------------------------------------------------------------
 !
+        do itrc=1,NT
+          if (wrtavg(indxV+itrc)) then
+            lvar=lenstr(vname(1,indxV+itrc))
+            ierr=nf_def_var (ncid, vname(1,indxV+itrc)(1:lvar),
+     &                             NF_REAL, 4, r3dgrd, avgT(itrc))
+          ierr=nf_var_par_access(ncid,avgT(itrc),nf_collective)
+            text='averaged '/ /vname(2,indxV+itrc)
+            lvar=lenstr(text)
+            ierr=nf_put_att_text (ncid, avgT(itrc), 'long_name',
+     &                                          lvar, text(1:lvar))
+            lvar=lenstr(vname(3,indxV+itrc))
+            ierr=nf_put_att_text (ncid, avgT(itrc), 'units', lvar,
+     &                               vname(3,indxV+itrc)(1:lvar))
+            lvar=lenstr(vname(4,indxV+itrc))
+            ierr=nf_put_att_text (ncid, avgT(itrc), 'field', lvar,
+     &                               vname(4,indxV+itrc)(1:lvar))
+
+            call nf_add_attribute(ncid,avgT(itrc),vname(:,indxV+itrc),5,
+     &           NF_REAL, ierr)
+          endif
+
+        enddo
 !
 !-----------------------------------------------------------------------
 ! Density anomaly.
@@ -7667,6 +7862,25 @@
 !
 ! Vertical diffusion coefficient for potential temperature.
 !
+        if (wrtavg(indxAkt)) then
+          lvar=lenstr(vname(1,indxAkt))
+          ierr=nf_def_var (ncid, vname(1,indxAkt)(1:lvar),
+     &                              NF_REAL, 4, w3dgrd, avgAkt)
+          ierr=nf_var_par_access(ncid,avgAkt,nf_collective)
+          text='averaged '/ /vname(2,indxAkt)
+          lvar=lenstr(text)
+          ierr=nf_put_att_text (ncid, avgAkt, 'long_name', lvar,
+     &                                              text(1:lvar))
+          lvar=lenstr(vname(3,indxAkt))
+          ierr=nf_put_att_text (ncid, avgAkt, 'units',     lvar,
+     &                                  vname(3,indxAkt)(1:lvar))
+          lvar=lenstr(vname(4,indxAkt))
+          ierr=nf_put_att_text (ncid, avgAkt, 'field',     lvar,
+     &                                  vname(4,indxAkt)(1:lvar))
+
+          call nf_add_attribute(ncid, avgAkt, vname(:,indxAkt), 
+     &                           5, NF_REAL, ierr)
+        endif
 
 
 !
@@ -7762,6 +7976,22 @@
 !
 ! Shflx [W/m2]
 !
+        if (wrtavg(indxShflx)) then
+          lvar=lenstr(vname(1,indxShflx))
+          ierr=nf_def_var (ncid, vname(1,indxShflx)(1:lvar),
+     &                             NF_REAL, 3, r2dgrd, avgShflx)
+          ierr=nf_var_par_access(ncid,avgShflx,nf_collective)
+          text='averaged '/ /vname(2,indxShflx)
+          lvar=lenstr(text)
+          ierr=nf_put_att_text (ncid, avgShflx, 'long_name', lvar,
+     &                                               text(1:lvar))
+          lvar=lenstr(vname(3,indxShflx))
+          ierr=nf_put_att_text (ncid, avgShflx, 'units',     lvar,
+     &                                 vname(3,indxShflx)(1:lvar))
+
+          call nf_add_attribute(ncid, avgShflx, vname(:,indxShflx), 5,
+     &                          NF_REAL, ierr)
+        endif
 !
 ! Swflx [cm/day]
 !
@@ -7770,6 +8000,23 @@
 !
 ! Short wave Shflx_rsw [W/m2]
 !
+      if (wrtavg(indxShflx_rsw)) then
+        lvar=lenstr(vname(1,indxShflx_rsw))
+        ierr=nf_def_var (ncid, vname(1,indxShflx_rsw)(1:lvar),
+     &                           NF_REAL, 3, r2dgrd, avgShflx_rsw)
+          ierr=nf_var_par_access(ncid,avgShflx_rsw,nf_collective)
+          text='averaged '/ /vname(2,indxShflx_rsw)
+          lvar=lenstr(text)
+          ierr=nf_put_att_text (ncid, avgShflx_rsw, 'long_name', lvar,
+     &                                               text(1:lvar))
+          lvar=lenstr(vname(3,indxShflx_rsw))
+          ierr=nf_put_att_text (ncid, avgShflx_rsw, 'units',     lvar,
+     &                                 vname(3,indxShflx_rsw)(1:lvar))
+
+        call nf_add_attribute(ncid, avgShflx_rsw, 
+     &               vname(:,indxShflx_rsw), 5, NF_REAL, ierr)
+
+      endif
 
 
 
@@ -8020,6 +8267,19 @@
 !
 ! Tracer variables.
 !
+        do itrc=1,NT
+          if (wrtavg(indxV+itrc)) then
+            lvar=lenstr(vname(1,indxV+itrc))
+            ierr=nf_inq_varid (ncid, vname(1,indxV+itrc)(1:lvar),
+     &                                                 avgT(itrc))
+            if (ierr .ne. nf_noerr) then
+              write(stdout,1) vname(1,indxV+itrc)(1:lvar),
+     &                                       avgname(1:lstr)
+              goto 99                                     !--> ERROR
+            endif
+            ierr=nf_var_par_access(ncid,avgT(itrc),nf_collective)
+          endif
+        enddo
 !
 ! Density anomaly.
 !
@@ -8099,6 +8359,15 @@
 !
 ! Vertical diffusion coefficient for potential temperature.
 !
+        if (wrtavg(indxAkt)) then
+          lvar=lenstr(vname(1,indxAkt))
+          ierr=nf_inq_varid (ncid,vname(1,indxAkt)(1:lvar), avgAkt)
+          if (ierr .ne. nf_noerr) then
+            write(stdout,1) vname(1,indxAkt)(1:lvar), avgname(1:lstr)
+            goto 99                                       !--> ERROR
+          endif
+          ierr=nf_var_par_access(ncid,avgAkt,nf_collective)
+        endif
 
 
 
@@ -8155,10 +8424,30 @@
 !
 ! Shflx     Surface net heat flux [W/m2]
 !
+        if (wrtavg(indxShflx)) then
+          lvar=lenstr(vname(1,indxShflx))
+          ierr=nf_inq_varid (ncid,vname(1,indxShflx)(1:lvar),
+     &                                                   avgShflx)
+          if (ierr .ne. nf_noerr) then
+            write(stdout,1) vname(1,indxShflx)(1:lvar), avgname(1:lstr)
+            goto 99                                       !--> ERROR
+          endif
+          ierr=nf_var_par_access(ncid,avgShflx,nf_collective)
+        endif
 
 !
 ! Shflx     Surface shortwave radiation [W/m2]
 !
+        if (wrtavg(indxShflx_rsw)) then
+          lvar=lenstr(vname(1,indxShflx_rsw))
+          ierr=nf_inq_varid (ncid,vname(1,indxShflx_rsw)(1:lvar),
+     &                                                avgShflx_rsw)
+          if (ierr .ne. nf_noerr) then
+            write(stdout,1) vname(1,indxShflx_rsw)(1:lvar), avgname(1:lstr)
+            goto 99                                       !--> ERROR
+          endif
+          ierr=nf_var_par_access(ncid,avgShflx_rsw,nf_collective)
+        endif
 !
 !
 !-----------------------------------------------------------------------

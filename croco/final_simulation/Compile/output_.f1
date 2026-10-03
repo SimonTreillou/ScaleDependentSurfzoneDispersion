@@ -39,18 +39,29 @@
 
 ! PROCESSES:
 
-! MR only (no longshore current)
-! TRC+ (no longshore current)
-! +SW (longshore current)
-! TRC++SW (longshore current)
+! Vertical shear (VS) only
+! Short-Crested waves (SC) only
+!  and SC
+!  and Longshore Drift (LD)
+! , LD and SC
+
+! Tracer is active or not
 
 ! Point source release if active, longshore uniform else
 
 
+! When only , need for a perturbation 
+! to trigger the instability
 
+! VSSC
 
+! SC
 
-!# define BSTRESS_FAST
+! VSLD
+
+! VSLDSC
+
+!# define GLS_KOMEGA
 ! Common bathymetry:
 !# define CLARK 
 ! Case specific bathymetry
@@ -395,11 +406,12 @@
       integer   ntrc_subs, ntrc_substot
       integer   ntrc_mld
 !
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
+!======================================================================
       parameter (ntrc_bio=0)
 
 
@@ -437,6 +449,7 @@
       integer   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer   ntrc_diaeddy, ntrc_surf
+     &          , itpas
 !
 
 
@@ -444,6 +457,7 @@
 ! ================  Parameters  =====================
 !
 
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
 
 !
 ! ===  BIOLOGY  ===
@@ -602,6 +616,7 @@
       real  theta_s,   theta_b,   Tcline,  hc
       real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
       real  rx0, rx1
+      real  tnu2(NT),tnu4(NT)
       real R0,T0,S0, Tcoef, Scoef
       real weight(6,0:NWEIGHT)
 
@@ -615,6 +630,7 @@
       integer nsta, nrpfsta
 
       logical ldefhis
+      logical got_tini(NT)
       logical ldefdiags_eddy
       logical ldefdiags_eddy_avg
       logical ldefsta
@@ -626,6 +642,7 @@
      &           , theta_s,   theta_b,   Tcline,  hc
      &           , sc_w,      Cs_w,      sc_r,    Cs_r
      &           , rx0,       rx1
+     &           ,       tnu2,    tnu4
      &                      , R0,T0,S0,  Tcoef,   Scoef
      &                      , weight
      &                      , x_sponge,   v_sponge
@@ -634,6 +651,7 @@
      &      , nfast,  nrrec,     nrst,    nwrt
      &                                 , ntsavg,  navg
      &                      , nsta, nrpfsta
+     &                      , got_tini
      &                      , ldefdiags_eddy, nwrtdiags_eddy
      &                      , ldefdiags_eddy_avg
      &                      , nwrtdiags_eddy_avg
@@ -643,6 +661,8 @@
 
       real Akv_bak
       common /scalars_akv/ Akv_bak
+      real Akt_bak(NT)
+      common /scalars_akt/ Akt_bak
 !
 !-----------------------------------------------------------------------
 ! This following common block contains a set of globally accessable
@@ -939,6 +959,14 @@
       integer indxU, indxV
       parameter (indxU=6, indxV=7)
 
+      integer indxT
+      parameter (indxT=indxV+1)
+
+
+
+      integer, dimension(ntrc_pas) :: indxTPAS
+     & =(/(iloop,iloop=indxV+ntrc_temp+ntrc_salt+ntrc_mld+1,
+     &  indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas)/)
 
       integer indxBSD, indxBSS
       parameter (indxBSD=indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas+
@@ -1127,9 +1155,12 @@
      &     , ntsrf,  ntssh,  ntsst, ntsss, ntuclm
      &     , ntbulk, ntqbar, ntww
 
+      integer nttclm(NT), ntstf(NT), nttsrc(NT)
+     &       , ntbtf(NT)
       integer ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+      integer rstT(NT)
       integer rstAkv,rstAkt
       integer rstTke,rstGls
       integer rstBustr, rstBvstr
@@ -1172,6 +1203,7 @@
      &      , avgbvf
      &      , avgTke, avgGls, avgLsc
 
+      integer avgT(NT)
 
 
 
@@ -1201,9 +1233,12 @@
      &     , ntsms, ntsrf, ntssh, ntsst
      &     , ntuclm, ntsss, ntbulk, ntqbar, ntww
 
+     &     ,  nttclm, ntstf, nttsrc, ntbtf
+
      &      , ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+     & ,   rstT
      &      , rstAkv,rstAkt
      &      , rstTke,rstGls
      &      , rstBustr,rstBvstr
@@ -1248,6 +1283,7 @@
      &      , avgShflx, avgSwflx, avgShflx_rsw
      &      , avgBhflx, avgBwflx
      &      , avgU,    avgV
+     &      ,     avgT
      &      ,     avgR
      &      , avgO,    avgW,     avgVisc,  avgDiff
      &      , avgAkv,  avgAkt,   avgAks
@@ -1343,9 +1379,11 @@
      &        istavrt
 !======================================================================
 ! Simon Treillou, 02/2026 - add tracer concentration and vorticity to station
+     &      , istaptr, nptr_sta
 
+      parameter (nptr_sta=NT-1)
 
-      parameter (NSTAVARS=12,
+      parameter (NSTAVARS=12+nptr_sta,
      &        istagrd=-1,        istatstr=0,
      &        istaxgrd=1,        istaygrd=2,      istazgrd=3,
      &        istalon=4,         istalat=5,       istadpt=6,
@@ -1354,6 +1392,7 @@
      &        istavrt=13
 !======================================================================
 ! Simon Treillou, 02/2026 - add tracer concentration to station
+     &      , istaptr=14
      &        )
 !======================================================================
 
@@ -1371,7 +1410,7 @@
 
 !======================================================================
 ! Simon Treillou, 02/2026 - add tracer concentration to station
-      real stadata(1:NSTAVARS,Msta), staSigm(istadpt:istav,Msta,N)
+      real stadata(1:NSTAVARS,Msta), staSigm(1:NSTAVARS,Msta,N)
 !======================================================================
       common /sta_data/ stadata, staSigm
 
@@ -1405,13 +1444,14 @@
       integer stafield
 !======================================================================
 ! Simon Treillou, 02/2026 - add tracer concentration and vorticity to station
-      parameter(stafield=6)
+      parameter(stafield=7)
 
       integer indxstaGrd, indxstaTemp, indxstaSalt,
      &        indxstaRho, indxstaVel, indxstaVrt
+     &      , indxstaPtr
       parameter (     indxstaGrd=1, indxstaTemp=2,
      &                indxstaSalt=3, indxstaRho=4,  indxstaVel=5,
-     &                indxstaVrt=6)
+     &                indxstaVrt=6, indxstaPtr=7)
 !======================================================================
 
 
@@ -1424,8 +1464,10 @@
 !======================================================================
      &      , staX,       staY
      &      , staDepth,   staDen
+     &      , staTemp
 !======================================================================
 ! Simon Treillou, 02/2026 - add tracer concentration to station
+     &      , staPtr(NT)
 !======================================================================
       logical wrtsta(stafield)
 
@@ -1439,8 +1481,10 @@
 !======================================================================
      &      , staX,       staY
      &      , staDepth,   staDen
+     &      ,   staTemp
 !======================================================================
 ! Simon Treillou, 02/2026 - add tracer concentration to station
+     &      , staPtr
 !======================================================================
 
      &      , wrtsta

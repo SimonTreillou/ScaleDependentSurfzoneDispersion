@@ -43,11 +43,11 @@
       integer*4   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
       integer*4   ntrc_subs, ntrc_substot
       integer*4   ntrc_mld
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
       parameter (ntrc_bio=0)
       parameter (ntrc_subs=0, ntrc_substot=0)
       parameter (ntrc_sed=0)
@@ -63,6 +63,8 @@
       integer*4   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer*4   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer*4   ntrc_diaeddy, ntrc_surf
+     &          , itpas
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
       parameter (ntrc_diabio=0)
       parameter (ntrc_diats=0)
       parameter (ntrc_diauv=0)
@@ -86,6 +88,7 @@
       real  theta_s,   theta_b,   Tcline,  hc
       real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
       real  rx0, rx1
+      real  tnu2(NT),tnu4(NT)
       real R0,T0,S0, Tcoef, Scoef
       real weight(6,0:NWEIGHT)
       real  x_sponge,   v_sponge
@@ -97,6 +100,7 @@
       integer*4 ntsdiags_eddy_avg, nwrtdiags_eddy_avg
       integer*4 nsta, nrpfsta
       logical ldefhis
+      logical got_tini(NT)
       logical ldefdiags_eddy
       logical ldefdiags_eddy_avg
       logical ldefsta
@@ -107,6 +111,7 @@
      &           , theta_s,   theta_b,   Tcline,  hc
      &           , sc_w,      Cs_w,      sc_r,    Cs_r
      &           , rx0,       rx1
+     &           ,       tnu2,    tnu4
      &                      , R0,T0,S0,  Tcoef,   Scoef
      &                      , weight
      &                      , x_sponge,   v_sponge
@@ -115,6 +120,7 @@
      &      , nfast,  nrrec,     nrst,    nwrt
      &                                 , ntsavg,  navg
      &                      , nsta, nrpfsta
+     &                      , got_tini
      &                      , ldefdiags_eddy, nwrtdiags_eddy
      &                      , ldefdiags_eddy_avg
      &                      , nwrtdiags_eddy_avg
@@ -123,6 +129,8 @@
      &                      , ldefhis
       real Akv_bak
       common /scalars_akv/ Akv_bak
+      real Akt_bak(NT)
+      common /scalars_akt/ Akt_bak
       logical synchro_flag
       common /sync_flag/ synchro_flag
       integer*4 may_day_flag
@@ -194,6 +202,11 @@
       parameter (indxTime=1, indxZ=2, indxUb=3, indxVb=4)
       integer*4 indxU, indxV
       parameter (indxU=6, indxV=7)
+      integer*4 indxT
+      parameter (indxT=indxV+1)
+      integer*4, dimension(ntrc_pas) :: indxTPAS
+     & =(/(iloop,iloop=indxV+ntrc_temp+ntrc_salt+ntrc_mld+1,
+     &  indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas)/)
       integer*4 indxBSD, indxBSS
       parameter (indxBSD=indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas+
      &           ntrc_bio+1,
@@ -283,9 +296,12 @@
      &     , ncidqbar, ncidbtf
      &     , ntsrf,  ntssh,  ntsst, ntsss, ntuclm
      &     , ntbulk, ntqbar, ntww
+      integer*4 nttclm(NT), ntstf(NT), nttsrc(NT)
+     &       , ntbtf(NT)
       integer*4 ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+      integer*4 rstT(NT)
       integer*4 rstAkv,rstAkt
       integer*4 rstTke,rstGls
       integer*4 rstBustr, rstBvstr
@@ -320,6 +336,7 @@
      &      , avgAkv, avgAkt, avgAks
      &      , avgbvf
      &      , avgTke, avgGls, avgLsc
+      integer*4 avgT(NT)
        integer*4 nciddiags_eddy_avg, nrecdiags_eddy_avg
      &      , nrpfdiags_eddy_avg
      &      , diags_eddyTime_avg, diags_eddyTime2_avg
@@ -341,9 +358,11 @@
      &     ncidfrc, ncidbulk,ncidclm, ncidqbar, ncidbtf
      &     , ntsms, ntsrf, ntssh, ntsst
      &     , ntuclm, ntsss, ntbulk, ntqbar, ntww
+     &     ,  nttclm, ntstf, nttsrc, ntbtf
      &      , ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+     & ,   rstT
      &      , rstAkv,rstAkt
      &      , rstTke,rstGls
      &      , rstBustr,rstBvstr
@@ -386,6 +405,7 @@
      &      , avgShflx, avgSwflx, avgShflx_rsw
      &      , avgBhflx, avgBwflx
      &      , avgU,    avgV
+     &      ,     avgT
      &      ,     avgR
      &      , avgO,    avgW,     avgVisc,  avgDiff
      &      , avgAkv,  avgAkt,   avgAks
@@ -430,18 +450,21 @@
      &                                ,   bry_file
      &                                ,   vname
       integer*4 stafield
-      parameter(stafield=6)
+      parameter(stafield=7)
       integer*4 indxstaGrd, indxstaTemp, indxstaSalt,
      &        indxstaRho, indxstaVel, indxstaVrt
+     &      , indxstaPtr
       parameter (     indxstaGrd=1, indxstaTemp=2,
      &                indxstaSalt=3, indxstaRho=4,  indxstaVel=5,
-     &                indxstaVrt=6)
+     &                indxstaVrt=6, indxstaPtr=7)
       integer*4 ncidsta,    nrecsta,    staGlevel
      &      , staTstep,   staTime,    staXgrd,   staYgrd
      &      , staZgrd,    staZeta,    staU,      staV
      &      , staVrt
      &      , staX,       staY
      &      , staDepth,   staDen
+     &      , staTemp
+     &      , staPtr(NT)
       logical wrtsta(stafield)
       common/incscrum_sta/
      &        ncidsta,    nrecsta,    staGlevel
@@ -450,6 +473,8 @@
      &      , staVrt
      &      , staX,       staY
      &      , staDepth,   staDen
+     &      ,   staTemp
+     &      , staPtr
      &      , wrtsta
       character*80  staname,   staposname
       common /cncscrum_sta/ staname,   staposname
@@ -472,6 +497,8 @@
       common /bmsdat4/bmscycle,   bms_onerec,   lbusgrd,   lbvsgrd
       real stflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E,NT)
       common /forces_stflx/stflx
+      real btflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E,NT)
+      common /forces_btflx/btflx
       real srflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
       common /forces_srflx/srflx
       integer*4 Nfrq, Ndir
@@ -722,6 +749,10 @@
         read(input,*,err=95) wrthis(indxZ),  wrthis(indxUb)
      &                                       ,  wrthis(indxVb)
      &                    ,  wrthis(indxU),  wrthis(indxV)
+     &                    , (wrthis(itrc), itrc=indxV+1,indxV+NT)
+        do itrc=1,NT
+          if (wrthis(indxV+itrc)) wrthis(indxTime)=.true.
+        enddo
         if ( wrthis(indxZ) .or. wrthis(indxUb) .or. wrthis(indxVb)
      &                        .or. wrthis(indxU) .or. wrthis(indxV)
      &     ) wrthis(indxTime)=.true.
@@ -732,7 +763,7 @@
      &                                          ,  wrthis(indxO)
      &                                          ,  wrthis(indxW)
      &                                          ,  wrthis(indxAkv)
-     &                                          ,  dumboolean
+     &                                          ,  wrthis(indxAkt)
      &                                          ,  dumboolean
      &                                          ,  wrthis(indxbvf)
      &                                          ,  wrthis(indxVisc)
@@ -745,9 +776,9 @@
      &                                          ,  wrthis(indxWstr)
      &                                          ,  wrthis(indxUWstr)
      &                                          ,  wrthis(indxVWstr)
+     &                                          ,  wrthis(indxShflx)
      &                                          ,  dumboolean
-     &                                          ,  dumboolean
-     &                                          ,  dumboolean
+     &                                          ,  wrthis(indxShflx_rsw)
      &                                          ,  dumboolean
      &                                          ,  dumboolean
      &                                          ,  dumboolean
@@ -758,6 +789,7 @@
      &                                        .or. wrthis(indxO)
      &                                        .or. wrthis(indxW)
      &                                        .or. wrthis(indxAkv)
+     &                                        .or. wrthis(indxAkt)
      &                                        .or. wrthis(indxbvf)
      &                                        .or. wrthis(indxVisc)
      &                                        .or. wrthis(indxHbl)
@@ -767,6 +799,8 @@
      &                                        .or. wrthis(indxWstr)
      &                                        .or. wrthis(indxUWstr)
      &                                        .or. wrthis(indxVWstr)
+     &                                        .or. wrthis(indxShflx)
+     &                                        .or. wrthis(indxShflx_rsw)
      &     ) wrthis(indxTime)=.true.
       elseif (keyword(1:kwlen).eq.'gls_history_fields') then
         call cancel_kwd (keyword(1:kwlen), ierr)
@@ -779,14 +813,18 @@
         read(input,*,err=95) wrtavg(indxZ),  wrtavg(indxUb)
      &                                    ,  wrtavg(indxVb)
      &                    ,  wrtavg(indxU),  wrtavg(indxV)
+     &                    , (wrtavg(itrc), itrc=indxV+1,indxV+NT)
         if ( wrtavg(indxZ) .or. wrtavg(indxUb) .or. wrtavg(indxVb)
      &                     .or. wrtavg(indxU)  .or. wrtavg(indxV)
      &     ) wrtavg(indxTime)=.true.
+         do itrc=1,NT
+          if (wrtavg(indxV+itrc)) wrtavg(indxTime)=.true.
+        enddo
       elseif (keyword(1:kwlen).eq.'auxiliary_averages') then
         call cancel_kwd (keyword(1:kwlen), ierr)
         read(input,*,err=95) wrtavg(indxR), wrtavg(indxO)
      &        ,  wrtavg(indxW),  wrtavg(indxAkv)
-     &                                          ,  dumboolean
+     &                                          ,  wrtavg(indxAkt)
      &                                          ,  dumboolean
      &                                          ,  wrtavg(indxbvf)
      &                                          ,  wrtavg(indxVisc)
@@ -799,9 +837,9 @@
      &                                          ,  wrtavg(indxWstr)
      &                                          ,  wrtavg(indxUWstr)
      &                                          ,  wrtavg(indxVWstr)
+     &                                          ,  wrtavg(indxShflx)
      &                                          ,  dumboolean
-     &                                          ,  dumboolean
-     &                                          ,  dumboolean
+     &                                          ,  wrtavg(indxShflx_rsw)
      &                                          ,  dumboolean
      &                                          ,  dumboolean
      &                                          ,  dumboolean
@@ -810,6 +848,7 @@
      &                                          ,  dumboolean
         if ( wrtavg(indxR) .or. wrtavg(indxO) .or. wrtavg(indxW)
      &                   .or. wrtavg(indxAkv)
+     &                                        .or. wrtavg(indxAkt)
      &                                        .or. wrtavg(indxbvf)
      &                                        .or. wrtavg(indxVisc)
      &                                        .or. wrtavg(indxHbl)
@@ -819,6 +858,8 @@
      &                                        .or. wrtavg(indxWstr)
      &                                        .or. wrtavg(indxUWstr)
      &                                        .or. wrtavg(indxVWstr)
+     &                                        .or. wrtavg(indxShflx)
+     &                                        .or. wrtavg(indxShflx_rsw)
      &     ) wrtavg(indxTime)=.true.
       elseif (keyword(1:kwlen).eq.'gls_averages') then
         call cancel_kwd (keyword(1:kwlen), ierr)
@@ -859,6 +900,7 @@
         read(input,*,err=95) gamma2
       elseif (keyword(1:kwlen).eq.'tracer_diff2') then
         call cancel_kwd (keyword(1:kwlen), ierr)
+        read(input,*,err=95) (tnu2(itrc),itrc=1,NT)
       elseif (keyword(1:kwlen).eq.'sponge') then
          call cancel_kwd (keyword(1:kwlen), ierr)
       elseif (keyword(1:kwlen).eq.'nudg_cof') then
@@ -972,11 +1014,18 @@
      &    , wrthis(indxVb), 'write VBAR ', '2D V-momentum component.'
      &    , wrthis(indxU),  'write U    ', '3D U-momentum component.'
      &    , wrthis(indxV),  'write V    ', '3D V-momentum component.'
+          do itrc=1,NT
+          if (mynode.eq.0) write(stdout, '(6x,L1,2x,A,I2,A,I2,A)')
+     &                     wrthis(indxV+itrc), 'write T(', itrc,
+     &                              ')  Tracer of index', itrc,'.'
+          enddo
           if (mynode.eq.0) write(stdout,'(8(/6x,l1,2x,A,1x,A))')
      &    wrthis(indxR),    'write RHO  ', 'Density anomaly.'
      &  , wrthis(indxO),    'write Omega', 'Omega vertical velocity.'
      &  , wrthis(indxW),    'write W    ', 'True vertical velocity.'
      &  , wrthis(indxAkv),  'write Akv  ', 'Vertical viscosity.'
+     &  , wrthis(indxAkt),  'write Akt  ',
+     &                      'Vertical diffusivity for temperature.'
      &  , wrthis(indxbvf),  'write bvf  ',
      &                         'Brunt Vaisala Frequency.'
      &  , wrthis(indxVisc),  'write Visc3d', 'Horizontal viscosity.'
@@ -988,6 +1037,10 @@
      &  , wrthis(indxWstr),  'write Wstress', 'Wind Stress.'
      &  , wrthis(indxUWstr), 'write U-Wstress comp.', 'U-Wind Stress.'
      &  , wrthis(indxVWstr), 'write V-Wstress comp.', 'V-Wind Stress.'
+     &  , wrthis(indxShflx), 'write Shflx [W/m2]',
+     &                       'Surface net heat flux'
+     &  , wrthis(indxShflx_rsw),'write Shflx_rsw [W/m2]',
+     &                          'Short-wave surface radiation'
           if (mynode.eq.0) write(stdout,'(/1x,A,5(/6x,l1,2x,A,1x,A))')
      &    'Fields to be saved in history file: (T/F)'
      &   , wrthis(indxTke), 'write TKE ', 'turbulent kinetic energy.  '
@@ -1001,11 +1054,19 @@
      &  , wrtavg(indxVb), 'write VBAR ', '2D V-momentum component.'
      &  , wrtavg(indxU),  'write U    ', '3D U-momentum component.'
      &  , wrtavg(indxV),  'write V    ', '3D V-momentum component.'
+          do itrc=1,NT
+          if (mynode.eq.0) write(stdout,
+     &                     '(6x,L1,2x,A,I2,A,2x,A,I2,A)')
+     &                      wrtavg(indxV+itrc), 'write T(',
+     &                      itrc,')', 'Tracer of index', itrc,'.'
+          enddo
           if (mynode.eq.0) write(stdout,'(8(/6x,l1,2x,A,1x,A))')
      &    wrtavg(indxR),    'write RHO  ', 'Density anomaly'
      &  , wrtavg(indxO),    'write Omega', 'Omega vertical velocity.'
      &  , wrtavg(indxW),    'write W    ', 'True vertical velocity.'
      &  , wrtavg(indxAkv),  'write Akv  ', 'Vertical viscosity'
+     &  , wrtavg(indxAkt),  'write Akt  ',
+     &                      'Vertical diffusivity for temperature.'
      &  , wrtavg(indxbvf),  'write bvf  ',
      &                         'Brunt Vaisala Frequency.'
      &  , wrtavg(indxVisc),'write visc3d', 'Horizontal viscosity'
@@ -1017,6 +1078,10 @@
      &  , wrtavg(indxWstr), 'write Wstr', 'Wind Stress.'
      &  , wrtavg(indxUWstr),'write U-Wstress comp.', 'U-Wind Stress.'
      &  , wrtavg(indxVWstr),'write V-Wstress comp.', 'V-Wind Stress.'
+     &  , wrtavg(indxShflx),'write Shflx [W/m2]',
+     &                      'Surface net heat flux.'
+     &  , wrtavg(indxShflx_rsw),'write Shflx_rsw [W/m2]',
+     &                      'Short-wave surface radiation.'
           if (mynode.eq.0) write(stdout,'(/1x,A,5(/6x,l1,2x,A,1x,A))')
      &    'Fields to be saved in average file: (T/F)'
      &   , wrtavg(indxTke), 'write TKE ', 'turbulent kinetic energy.  '
@@ -1057,6 +1122,11 @@
           if (mynode.eq.0) write(stdout,'(f10.2,2x,A,1x,A)')
      &     gamma2, 'gamma2   Slipperiness parameter:',
      &                     'free-slip +1, or no-slip -1.'
+          do itrc=1,NT
+          if (mynode.eq.0) write(stdout,7) tnu2(itrc), itrc, itrc
+7      format(1pe10.3,'  tnu2(',i2,')  Horizontal Laplacian '
+     &     ,'mixing coefficient (m2/s)',/,32x,'for tracer ',i2,'.')
+          enddo
           if (mynode.eq.0) write(stdout,'(/,1x,A,/,25x,A/)')
      &   'SPONGE_GRID is defined: x_sponge parameter in sponge/nudging',
      &   'layer is set generically in set_nudgcof.F routine'

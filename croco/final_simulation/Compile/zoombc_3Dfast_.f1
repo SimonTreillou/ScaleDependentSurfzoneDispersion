@@ -41,18 +41,29 @@
 
 ! PROCESSES:
 
-! MR only (no longshore current)
-! TRC+ (no longshore current)
-! +SW (longshore current)
-! TRC++SW (longshore current)
+! Vertical shear (VS) only
+! Short-Crested waves (SC) only
+!  and SC
+!  and Longshore Drift (LD)
+! , LD and SC
+
+! Tracer is active or not
 
 ! Point source release if active, longshore uniform else
 
 
+! When only , need for a perturbation 
+! to trigger the instability
 
+! VSSC
 
+! SC
 
-!# define BSTRESS_FAST
+! VSLD
+
+! VSLDSC
+
+!# define GLS_KOMEGA
 ! Common bathymetry:
 !# define CLARK 
 ! Case specific bathymetry

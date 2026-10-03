@@ -44,11 +44,11 @@
       integer*4   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
       integer*4   ntrc_subs, ntrc_substot
       integer*4   ntrc_mld
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
       parameter (ntrc_bio=0)
       parameter (ntrc_subs=0, ntrc_substot=0)
       parameter (ntrc_sed=0)
@@ -64,6 +64,8 @@
       integer*4   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer*4   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer*4   ntrc_diaeddy, ntrc_surf
+     &          , itpas
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
       parameter (ntrc_diabio=0)
       parameter (ntrc_diats=0)
       parameter (ntrc_diauv=0)
@@ -143,11 +145,11 @@ C$    integer*4 omp_get_thread_num
       integer*4   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
       integer*4   ntrc_subs, ntrc_substot
       integer*4   ntrc_mld
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
       parameter (ntrc_bio=0)
       parameter (ntrc_subs=0, ntrc_substot=0)
       parameter (ntrc_sed=0)
@@ -163,6 +165,8 @@ C$    integer*4 omp_get_thread_num
       integer*4   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer*4   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer*4   ntrc_diaeddy, ntrc_surf
+     &          , itpas
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
       parameter (ntrc_diabio=0)
       parameter (ntrc_diats=0)
       parameter (ntrc_diauv=0)
@@ -186,6 +190,7 @@ C$    integer*4 omp_get_thread_num
       real  theta_s,   theta_b,   Tcline,  hc
       real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
       real  rx0, rx1
+      real  tnu2(NT),tnu4(NT)
       real R0,T0,S0, Tcoef, Scoef
       real weight(6,0:NWEIGHT)
       real  x_sponge,   v_sponge
@@ -197,6 +202,7 @@ C$    integer*4 omp_get_thread_num
       integer*4 ntsdiags_eddy_avg, nwrtdiags_eddy_avg
       integer*4 nsta, nrpfsta
       logical ldefhis
+      logical got_tini(NT)
       logical ldefdiags_eddy
       logical ldefdiags_eddy_avg
       logical ldefsta
@@ -207,6 +213,7 @@ C$    integer*4 omp_get_thread_num
      &           , theta_s,   theta_b,   Tcline,  hc
      &           , sc_w,      Cs_w,      sc_r,    Cs_r
      &           , rx0,       rx1
+     &           ,       tnu2,    tnu4
      &                      , R0,T0,S0,  Tcoef,   Scoef
      &                      , weight
      &                      , x_sponge,   v_sponge
@@ -215,6 +222,7 @@ C$    integer*4 omp_get_thread_num
      &      , nfast,  nrrec,     nrst,    nwrt
      &                                 , ntsavg,  navg
      &                      , nsta, nrpfsta
+     &                      , got_tini
      &                      , ldefdiags_eddy, nwrtdiags_eddy
      &                      , ldefdiags_eddy_avg
      &                      , nwrtdiags_eddy_avg
@@ -223,6 +231,8 @@ C$    integer*4 omp_get_thread_num
      &                      , ldefhis
       real Akv_bak
       common /scalars_akv/ Akv_bak
+      real Akt_bak(NT)
+      common /scalars_akt/ Akt_bak
       logical synchro_flag
       common /sync_flag/ synchro_flag
       integer*4 may_day_flag

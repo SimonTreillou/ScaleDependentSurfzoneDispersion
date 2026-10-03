@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH -J R3_MRSWTRC_1
+#SBATCH -J R3_VS_1
 #SBATCH --partition=serc
-#SBATCH -o R3_MRSWTRC_1-%j.out
-#SBATCH -e R3_MRSWTRC_1-%j.err
-#SBATCH --time=48:00:00
+#SBATCH -o R3_VS_1-%j.out
+#SBATCH -e R3_VS_1-%j.err
+#SBATCH --time=100:00:00
 #SBATCH --nodes=5
 #SBATCH --ntasks=120
 #SBATCH --ntasks-per-node=24
@@ -20,13 +20,13 @@ module load gcc openmpi netcdf hdf5 netcdf-c netcdf-fortran
 export croco=/home/groups/bakercm/CROCO/croco
 export configs=/home/users/treillou/Configs
 homedir=$SLURM_SUBMIT_DIR
-workdir=$SCRATCH/CLARK_PROD/R3_MR_spinup
+workdir=$SCRATCH/CLARK_PROD/R3_VS_tracer_keps
 
 count=1
 while [ -d "$workdir" ]; do
   echo "Directory $workdir already exists."
   count=$((count + 1))
-  workdir="$SCRATCH/CLARK_PROD/R3_MRSW_spinup_$count"
+  workdir="$SCRATCH/CLARK_PROD/R3_VS_spinup_keps_$count"
 done
 
 if [ ! -d "$SCRATCH/CLARK_PROD" ]; then

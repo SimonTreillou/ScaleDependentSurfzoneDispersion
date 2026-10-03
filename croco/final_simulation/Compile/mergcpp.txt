@@ -1442,21 +1442,24 @@
 */
 ! PROCESSES:
 
-! MR only (no longshore current)
-# define MR
-! TRC+MR (no longshore current)
-# undef TRCMR
-! MR+SW (longshore current)
-# undef MRSW
-! TRC+MR+SW (longshore current)
-# undef TRCMRSW
+! Vertical shear (VS) only
+# define VS
+! Short-Crested waves (SC) only
+# undef SC
+! VS and SC
+# undef VSSC
+! VS and Longshore Drift (LD)
+# undef VSLD
+! VS, LD and SC
+# undef VSLDSC
+
+! Tracer is active or not
+# undef SPINUP
 
 ! Point source release if active, longshore uniform else
-# define SPINUP
-
-# ifdef MRSW
+# ifdef VSLD
 #  define PLUME
-# elif defined TRCMRSW
+# elif defined VSLDSC
 #  define PLUME
 # else
 #  undef PLUME
@@ -1466,7 +1469,6 @@
 #  define NO_TRACER
 #  define NO_TEMPERATURE
 #  undef PASSIVE_TRACER
-
 # else
 #  undef NO_TRACER
 #  undef NO_TEMPERATURE
@@ -1474,21 +1476,50 @@
 #   define PASSIVE_TRACER
 #   define NOPER_TRACER
 #  else
-#   define  PASSIVE_TRACER
+#   define PASSIVE_TRACER
 #   define LONGSHORE_TRACER
 #  endif
 # endif
 
-# ifdef MR
+! When only VS, need for a perturbation 
+! to trigger the instability
+# ifdef VS
 #  define BATHY_PERTURBATION
-# elif defined TRCMR
+#  undef INPUT_ANGLE
+#  undef INPUT_DIRSPREAD
+#  undef DEEP_BREAKING
+# endif
+
+! VSSC
+# ifdef VSSC
+#  undef BATHY_PERTURBATION
 #  undef INPUT_ANGLE
 #  define INPUT_DIRSPREAD
-# elif defined MRSW
+#  undef DEEP_BREAKING
+# endif
+
+! SC
+# ifdef SC
 #  undef BATHY_PERTURBATION
-# elif defined TRCMRSW
+#  undef INPUT_ANGLE
+#  define INPUT_DIRSPREAD
+#  define DEEP_BREAKING
+# endif
+
+! VSLD
+# ifdef VSLD
+#  undef BATHY_PERTURBATION
+#  undef INPUT_ANGLE
+#  undef INPUT_DIRSPREAD
+#  undef DEEP_BREAKING
+# endif
+
+! VSLDSC
+# ifdef VSLDSC
+#  undef BATHY_PERTURBATION
 #  define INPUT_ANGLE
 #  define INPUT_DIRSPREAD
+#  undef DEEP_BREAKING
 # endif
 
 # define MPI
@@ -1498,7 +1529,6 @@
 # define UV_ADV
 # define NBQ
 # define NBQ_PRECISE
-!# define BSTRESS_FAST
 # define LIMIT_BSTRESS
 # define WAVE_MAKER
 # define WAVE_MAKER_SPECTRUM
@@ -1512,7 +1542,7 @@
 # define TS_HADV_WENO5
 # define TS_VADV_WENO5
 # define GLS_MIXING_3D
-# define GLS_KOMEGA
+!# define GLS_KOMEGA
 # define GLS_KEPSILON
 # define NS_PERIODIC
 # define OBC_WEST

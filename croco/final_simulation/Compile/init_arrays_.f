@@ -44,11 +44,11 @@
       integer*4   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
       integer*4   ntrc_subs, ntrc_substot
       integer*4   ntrc_mld
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
       parameter (ntrc_bio=0)
       parameter (ntrc_subs=0, ntrc_substot=0)
       parameter (ntrc_sed=0)
@@ -64,6 +64,8 @@
       integer*4   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer*4   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer*4   ntrc_diaeddy, ntrc_surf
+     &          , itpas
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
       parameter (ntrc_diabio=0)
       parameter (ntrc_diats=0)
       parameter (ntrc_diauv=0)
@@ -138,11 +140,11 @@ C$    integer*4 omp_get_thread_num
       integer*4   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
       integer*4   ntrc_subs, ntrc_substot
       integer*4   ntrc_mld
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
       parameter (ntrc_bio=0)
       parameter (ntrc_subs=0, ntrc_substot=0)
       parameter (ntrc_sed=0)
@@ -158,6 +160,8 @@ C$    integer*4 omp_get_thread_num
       integer*4   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer*4   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer*4   ntrc_diaeddy, ntrc_surf
+     &          , itpas
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
       parameter (ntrc_diabio=0)
       parameter (ntrc_diats=0)
       parameter (ntrc_diauv=0)
@@ -191,6 +195,11 @@ C$    integer*4 omp_get_thread_num
       parameter (indxTime=1, indxZ=2, indxUb=3, indxVb=4)
       integer*4 indxU, indxV
       parameter (indxU=6, indxV=7)
+      integer*4 indxT
+      parameter (indxT=indxV+1)
+      integer*4, dimension(ntrc_pas) :: indxTPAS
+     & =(/(iloop,iloop=indxV+ntrc_temp+ntrc_salt+ntrc_mld+1,
+     &  indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas)/)
       integer*4 indxBSD, indxBSS
       parameter (indxBSD=indxV+ntrc_temp+ntrc_salt+ntrc_mld+ntrc_pas+
      &           ntrc_bio+1,
@@ -280,9 +289,12 @@ C$    integer*4 omp_get_thread_num
      &     , ncidqbar, ncidbtf
      &     , ntsrf,  ntssh,  ntsst, ntsss, ntuclm
      &     , ntbulk, ntqbar, ntww
+      integer*4 nttclm(NT), ntstf(NT), nttsrc(NT)
+     &       , ntbtf(NT)
       integer*4 ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+      integer*4 rstT(NT)
       integer*4 rstAkv,rstAkt
       integer*4 rstTke,rstGls
       integer*4 rstBustr, rstBvstr
@@ -317,6 +329,7 @@ C$    integer*4 omp_get_thread_num
      &      , avgAkv, avgAkt, avgAks
      &      , avgbvf
      &      , avgTke, avgGls, avgLsc
+      integer*4 avgT(NT)
        integer*4 nciddiags_eddy_avg, nrecdiags_eddy_avg
      &      , nrpfdiags_eddy_avg
      &      , diags_eddyTime_avg, diags_eddyTime2_avg
@@ -338,9 +351,11 @@ C$    integer*4 omp_get_thread_num
      &     ncidfrc, ncidbulk,ncidclm, ncidqbar, ncidbtf
      &     , ntsms, ntsrf, ntssh, ntsst
      &     , ntuclm, ntsss, ntbulk, ntqbar, ntww
+     &     ,  nttclm, ntstf, nttsrc, ntbtf
      &      , ncidrst, nrecrst,  nrpfrst
      &      , rstTime, rstTime2, rstTstep, rstZ,    rstUb,  rstVb
      &                         , rstU,    rstV
+     & ,   rstT
      &      , rstAkv,rstAkt
      &      , rstTke,rstGls
      &      , rstBustr,rstBvstr
@@ -383,6 +398,7 @@ C$    integer*4 omp_get_thread_num
      &      , avgShflx, avgSwflx, avgShflx_rsw
      &      , avgBhflx, avgBwflx
      &      , avgU,    avgV
+     &      ,     avgT
      &      ,     avgR
      &      , avgO,    avgW,     avgVisc,  avgDiff
      &      , avgAkv,  avgAkt,   avgAks
@@ -597,6 +613,8 @@ C$    integer*4 omp_get_thread_num
       common /bmsdat4/bmscycle,   bms_onerec,   lbusgrd,   lbvsgrd
       real stflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E,NT)
       common /forces_stflx/stflx
+      real btflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E,NT)
+      common /forces_btflx/btflx
       real srflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
       common /forces_srflx/srflx
       integer*4 Nfrq, Ndir
@@ -675,6 +693,7 @@ C$    integer*4 omp_get_thread_num
       real  theta_s,   theta_b,   Tcline,  hc
       real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
       real  rx0, rx1
+      real  tnu2(NT),tnu4(NT)
       real R0,T0,S0, Tcoef, Scoef
       real weight(6,0:NWEIGHT)
       real  x_sponge,   v_sponge
@@ -686,6 +705,7 @@ C$    integer*4 omp_get_thread_num
       integer*4 ntsdiags_eddy_avg, nwrtdiags_eddy_avg
       integer*4 nsta, nrpfsta
       logical ldefhis
+      logical got_tini(NT)
       logical ldefdiags_eddy
       logical ldefdiags_eddy_avg
       logical ldefsta
@@ -696,6 +716,7 @@ C$    integer*4 omp_get_thread_num
      &           , theta_s,   theta_b,   Tcline,  hc
      &           , sc_w,      Cs_w,      sc_r,    Cs_r
      &           , rx0,       rx1
+     &           ,       tnu2,    tnu4
      &                      , R0,T0,S0,  Tcoef,   Scoef
      &                      , weight
      &                      , x_sponge,   v_sponge
@@ -704,6 +725,7 @@ C$    integer*4 omp_get_thread_num
      &      , nfast,  nrrec,     nrst,    nwrt
      &                                 , ntsavg,  navg
      &                      , nsta, nrpfsta
+     &                      , got_tini
      &                      , ldefdiags_eddy, nwrtdiags_eddy
      &                      , ldefdiags_eddy_avg
      &                      , nwrtdiags_eddy_avg
@@ -712,6 +734,8 @@ C$    integer*4 omp_get_thread_num
      &                      , ldefhis
       real Akv_bak
       common /scalars_akv/ Akv_bak
+      real Akt_bak(NT)
+      common /scalars_akt/ Akt_bak
       logical synchro_flag
       common /sync_flag/ synchro_flag
       integer*4 may_day_flag
@@ -1023,6 +1047,18 @@ C$    integer*4 omp_get_thread_num
           enddo
         enddo
       enddo
+      do itrc=1,NT
+        got_tini(itrc)=.false.
+        do k=1,N
+          do j=JstrR,JendR
+            do i=IstrR,IendR
+              t(i,j,k,1,itrc)=init
+              t(i,j,k,2,itrc)=init
+              t_avg(i,j,k,itrc)=init
+            enddo
+          enddo
+        enddo
+      enddo
       do k=1,N
         do j=JstrR,JendR
           do i=IstrR,IendR
@@ -1064,6 +1100,15 @@ C$    integer*4 omp_get_thread_num
           bvstrg(i,j,2)=init
         enddo
       enddo
+      do itrc=1,NT
+        do j=JstrR,JendR
+          do i=IstrR,IendR
+            stflx(i,j,itrc)=init
+            stflx_avg(i,j,itrc)=init
+            btflx(i,j,itrc)=init
+          enddo
+        enddo
+      enddo
       do j=JstrR,JendR
         do i=IstrR,IendR
           srflx(i,j)=init
@@ -1082,6 +1127,9 @@ C$    integer*4 omp_get_thread_num
           do j=JstrR,JendR
             ubry_west(j,k)=init
             vbry_west(j,k)=init
+            do itrc=1,NT
+              tbry_west(j,k,itrc)=init
+            enddo
           enddo
         enddo
       endif
@@ -1101,6 +1149,18 @@ C$    integer*4 omp_get_thread_num
             enddo
           enddo
         enddo
+        do itrc=1,NT
+          do j=JstrR,JendR
+            do i=IstrR,IendR
+              diff2(i,j,itrc)=tnu2(itrc)
+            enddo
+          enddo
+        enddo
+          do j=JstrR,JendR
+            do i=IstrR,IendR
+              diff2_sponge(i,j)=init
+            enddo
+          enddo
       do k=0,N
         do j=JstrR,JendR
           do i=IstrR,IendR
@@ -1110,6 +1170,7 @@ C$    integer*4 omp_get_thread_num
         enddo
         do j=JstrR,JendR
           do i=IstrR,IendR
+              Akt(i,j,k,itemp)=init
           enddo
         enddo
       enddo

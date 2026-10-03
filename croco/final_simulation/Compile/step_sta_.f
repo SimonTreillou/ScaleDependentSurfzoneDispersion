@@ -44,11 +44,11 @@
       integer*4   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
       integer*4   ntrc_subs, ntrc_substot
       integer*4   ntrc_mld
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
       parameter (ntrc_bio=0)
       parameter (ntrc_subs=0, ntrc_substot=0)
       parameter (ntrc_sed=0)
@@ -64,6 +64,8 @@
       integer*4   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer*4   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer*4   ntrc_diaeddy, ntrc_surf
+     &          , itpas
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
       parameter (ntrc_diabio=0)
       parameter (ntrc_diats=0)
       parameter (ntrc_diauv=0)
@@ -79,13 +81,16 @@
      &        istatem,           istasal,         istaden,
      &        istau,             istav,           istaz,
      &        istavrt
-      parameter (NSTAVARS=12,
+     &      , istaptr, nptr_sta
+      parameter (nptr_sta=NT-1)
+      parameter (NSTAVARS=12+nptr_sta,
      &        istagrd=-1,        istatstr=0,
      &        istaxgrd=1,        istaygrd=2,      istazgrd=3,
      &        istalon=4,         istalat=5,       istadpt=6,
      &        istatem=7,         istasal=8,       istaden=9,
      &        istau=10,          istav=11,        istaz=12,
      &        istavrt=13
+     &      , istaptr=14
      &        )
       logical diagsta
       integer*4 nstas0,nstas, stagrd(Msta)
@@ -94,7 +99,7 @@
       common /sta_info/ stainfo
       real staspval, stadeltap2c
       common /sta_scalars/ staspval, stadeltap2c
-      real stadata(1:NSTAVARS,Msta), staSigm(istadpt:istav,Msta,N)
+      real stadata(1:NSTAVARS,Msta), staSigm(1:NSTAVARS,Msta,N)
       common /sta_data/ stadata, staSigm
       real h(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
       real hinv(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
@@ -153,18 +158,21 @@
       real zob(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
       common /Z0B_VAR/zob
       integer*4 stafield
-      parameter(stafield=6)
+      parameter(stafield=7)
       integer*4 indxstaGrd, indxstaTemp, indxstaSalt,
      &        indxstaRho, indxstaVel, indxstaVrt
+     &      , indxstaPtr
       parameter (     indxstaGrd=1, indxstaTemp=2,
      &                indxstaSalt=3, indxstaRho=4,  indxstaVel=5,
-     &                indxstaVrt=6)
+     &                indxstaVrt=6, indxstaPtr=7)
       integer*4 ncidsta,    nrecsta,    staGlevel
      &      , staTstep,   staTime,    staXgrd,   staYgrd
      &      , staZgrd,    staZeta,    staU,      staV
      &      , staVrt
      &      , staX,       staY
      &      , staDepth,   staDen
+     &      , staTemp
+     &      , staPtr(NT)
       logical wrtsta(stafield)
       common/incscrum_sta/
      &        ncidsta,    nrecsta,    staGlevel
@@ -173,6 +181,8 @@
      &      , staVrt
      &      , staX,       staY
      &      , staDepth,   staDen
+     &      ,   staTemp
+     &      , staPtr
      &      , wrtsta
       character*80  staname,   staposname
       common /cncscrum_sta/ staname,   staposname
@@ -218,6 +228,7 @@
       real  theta_s,   theta_b,   Tcline,  hc
       real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
       real  rx0, rx1
+      real  tnu2(NT),tnu4(NT)
       real R0,T0,S0, Tcoef, Scoef
       real weight(6,0:NWEIGHT)
       real  x_sponge,   v_sponge
@@ -229,6 +240,7 @@
       integer*4 ntsdiags_eddy_avg, nwrtdiags_eddy_avg
       integer*4 nsta, nrpfsta
       logical ldefhis
+      logical got_tini(NT)
       logical ldefdiags_eddy
       logical ldefdiags_eddy_avg
       logical ldefsta
@@ -239,6 +251,7 @@
      &           , theta_s,   theta_b,   Tcline,  hc
      &           , sc_w,      Cs_w,      sc_r,    Cs_r
      &           , rx0,       rx1
+     &           ,       tnu2,    tnu4
      &                      , R0,T0,S0,  Tcoef,   Scoef
      &                      , weight
      &                      , x_sponge,   v_sponge
@@ -247,6 +260,7 @@
      &      , nfast,  nrrec,     nrst,    nwrt
      &                                 , ntsavg,  navg
      &                      , nsta, nrpfsta
+     &                      , got_tini
      &                      , ldefdiags_eddy, nwrtdiags_eddy
      &                      , ldefdiags_eddy_avg
      &                      , nwrtdiags_eddy_avg
@@ -255,6 +269,8 @@
      &                      , ldefhis
       real Akv_bak
       common /scalars_akv/ Akv_bak
+      real Akt_bak(NT)
+      common /scalars_akt/ Akt_bak
       logical synchro_flag
       common /sync_flag/ synchro_flag
       integer*4 may_day_flag
@@ -326,6 +342,7 @@
      &        tmpnfm1, tmpnfm2, entier
       integer*4 i, itrc, iflt, level, rcoeft,rcoefx,rcoefy,
      &        k, xfloat, yfloat, index1, index2, i1, j1
+     &      , iptr
       real    cff1, cff2, cff3, cff4, xrhs, yrhs, zrhs,
      &        invrcoeft, tmptrack , zfloat, d1, d2, temp, summ,
      &        temp2,tmp,tmp2
@@ -373,6 +390,19 @@
            if (wrtsta(indxstaVrt)) then
              call interp_r3d_sta_vrt (istavrt, nfltmax, indx)
            endif
+           if (wrtsta(indxstaTemp)) then
+             itrc=1
+             call interp_r3d_sta (t(-2,-2,1,nnew,itrc),
+     &                            istatem, nfltmax, indx)
+           endif
+           if (wrtsta(indxstaPtr)) then
+             iptr=0
+             do itrc=2,NT
+               iptr=iptr+1
+               call interp_r3d_sta (t(-2,-2,1,nnew,itrc),
+     &                             istaptr+iptr-1, nfltmax, indx)
+             enddo
+           endif
            do iflt=Lstr,Lend
             staSigm(istadpt,iflt,k)=stadata(istadpt,iflt)
             if (wrtsta(indxstaRho)) then
@@ -384,6 +414,17 @@
             endif
             if (wrtsta(indxstaVrt)) then
               staSigm(istavrt,iflt,k)=stadata(istavrt,iflt)
+            endif
+            if (wrtsta(indxstaTemp)) then
+              staSigm(istatem,iflt,k)=stadata(istatem,iflt)
+            endif
+            if (wrtsta(indxstaPtr)) then
+              iptr=0
+              do itrc=2,NT
+                iptr=iptr+1
+                staSigm(istaptr+iptr-1,iflt,k)=stadata(istaptr+iptr-1,
+     &                                               iflt)
+              enddo
             endif
            enddo
           enddo

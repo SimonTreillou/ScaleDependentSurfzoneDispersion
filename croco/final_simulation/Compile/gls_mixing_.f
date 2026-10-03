@@ -46,11 +46,11 @@
       integer*4   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
       integer*4   ntrc_subs, ntrc_substot
       integer*4   ntrc_mld
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
       parameter (ntrc_bio=0)
       parameter (ntrc_subs=0, ntrc_substot=0)
       parameter (ntrc_sed=0)
@@ -66,6 +66,8 @@
       integer*4   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer*4   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer*4   ntrc_diaeddy, ntrc_surf
+     &          , itpas
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
       parameter (ntrc_diabio=0)
       parameter (ntrc_diats=0)
       parameter (ntrc_diauv=0)
@@ -173,11 +175,11 @@
       integer*4   ntrc_temp, ntrc_salt, ntrc_pas, ntrc_bio, ntrc_sed
       integer*4   ntrc_subs, ntrc_substot
       integer*4   ntrc_mld
-      parameter (itemp=0)
-      parameter (ntrc_temp=0)
+      parameter (itemp=1)
+      parameter (ntrc_temp=1)
       parameter (ntrc_salt=0)
       parameter (ntrc_mld=0)
-      parameter (ntrc_pas=0)
+      parameter (ntrc_pas=1)
       parameter (ntrc_bio=0)
       parameter (ntrc_subs=0, ntrc_substot=0)
       parameter (ntrc_sed=0)
@@ -193,6 +195,8 @@
       integer*4   ntrc_diats, ntrc_diauv, ntrc_diabio
       integer*4   ntrc_diavrt, ntrc_diaek, ntrc_diapv
       integer*4   ntrc_diaeddy, ntrc_surf
+     &          , itpas
+      parameter (itpas=itemp+ntrc_salt+ntrc_mld+1)
       parameter (ntrc_diabio=0)
       parameter (ntrc_diats=0)
       parameter (ntrc_diauv=0)
@@ -251,6 +255,7 @@
       real  theta_s,   theta_b,   Tcline,  hc
       real  sc_w(0:N), Cs_w(0:N), sc_r(N), Cs_r(N)
       real  rx0, rx1
+      real  tnu2(NT),tnu4(NT)
       real R0,T0,S0, Tcoef, Scoef
       real weight(6,0:NWEIGHT)
       real  x_sponge,   v_sponge
@@ -262,6 +267,7 @@
       integer*4 ntsdiags_eddy_avg, nwrtdiags_eddy_avg
       integer*4 nsta, nrpfsta
       logical ldefhis
+      logical got_tini(NT)
       logical ldefdiags_eddy
       logical ldefdiags_eddy_avg
       logical ldefsta
@@ -272,6 +278,7 @@
      &           , theta_s,   theta_b,   Tcline,  hc
      &           , sc_w,      Cs_w,      sc_r,    Cs_r
      &           , rx0,       rx1
+     &           ,       tnu2,    tnu4
      &                      , R0,T0,S0,  Tcoef,   Scoef
      &                      , weight
      &                      , x_sponge,   v_sponge
@@ -280,6 +287,7 @@
      &      , nfast,  nrrec,     nrst,    nwrt
      &                                 , ntsavg,  navg
      &                      , nsta, nrpfsta
+     &                      , got_tini
      &                      , ldefdiags_eddy, nwrtdiags_eddy
      &                      , ldefdiags_eddy_avg
      &                      , nwrtdiags_eddy_avg
@@ -288,6 +296,8 @@
      &                      , ldefhis
       real Akv_bak
       common /scalars_akv/ Akv_bak
+      real Akt_bak(NT)
+      common /scalars_akt/ Akt_bak
       logical synchro_flag
       common /sync_flag/ synchro_flag
       integer*4 may_day_flag
@@ -378,11 +388,11 @@
       real            :: rp,    rm,    rn
       real            :: beta1, beta2, beta3m, beta3p
       real            :: OneOverSig(2)
-      parameter( rp    = -1.0D0 , rm    = 0.5D0  , rn     = -1.0D0      
+      parameter( rp    = 3.0D0 , rm    = 1.5D0 , rn     = -1.0D0        
      &                                                                 )
-      parameter( beta1 = 0.555D0, beta2 = 0.833D0, beta3m = -0.6D0, 
+      parameter( beta1 = 1.44D0, beta2 = 1.92D0, beta3m = -0.4D0, 
      &                                                   beta3p = 1.0D0)
-      parameter( OneOverSig = (/ 0.5D0, 0.5D0 /) )
+      parameter( OneOverSig = (/ 1.0D0, 0.7692D0 /) )
       REAL, PARAMETER :: e1 =  3.0D0 + 1.D0*rp / rn
       REAL, PARAMETER :: e2 =  1.5D0 + 1.D0*rm / rn
       REAL, PARAMETER :: e3 = -1.0D0 / rn
@@ -491,6 +501,8 @@
       common /bmsdat4/bmscycle,   bms_onerec,   lbusgrd,   lbvsgrd
       real stflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E,NT)
       common /forces_stflx/stflx
+      real btflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E,NT)
+      common /forces_btflx/btflx
       real srflx(-2:Lm+3+padd_X,-2:Mm+3+padd_E)
       common /forces_srflx/srflx
       integer*4 Nfrq, Ndir
@@ -819,7 +831,8 @@
                   cff3m =  ig1+ig2*beta3m  * invk*gls
                   cff3p =  ig1+ig2*beta3p  * invk*gls
                   Sprod =  cff1*Akv_old(i,j,k) * shear2(i,j,k)
-                  Bprod = 0.D0
+                  Bprod = -Akt_old(i,j,k)*( cff3m*MAX(bvf(i,j,k),0.D0)
+     &                                   +  cff3p*MIN(bvf(i,j,k),0.D0) )
                   cff   =       0.5D0*(Hz(i,j,k)+Hz(i,j,k+1))
                   IF( ig == itke ) THEN
                     trb_new=tke_new(i,j,k)
@@ -1035,6 +1048,7 @@
      &                                                        /Denom
                cff = trb( i,j,k,nnew,itke )**2 / epsilon
                Akv(i,j,k) = MAX( cff*c_mu , nuwm )
+               Akt(i,j,k,itemp)= MAX( cff*c_mu_prim , nuws )
                Lscale( i, j , k ) =  cm0 * cm0 * cm0 * cff
      &                              / sqrt( trb( i,j,k,nnew,itke ) )
                Eps_gls(i,j,k) = epsilon
@@ -1045,6 +1059,10 @@
      &                      -0.5D0*Akv(i,j,N-2), nuwm)
            Akv(i,j,0) = MAX( 1.5D0*Akv(i,j,  1)
      &                      -0.5D0*Akv(i,j,  2), nuwm)
+           Akt(i,j,N,itemp) = MAX(  1.5D0*Akt(i,j,N-1,itemp)
+     &                             -0.5D0*Akt(i,j,N-2,itemp), nuws )
+           Akt(i,j,0,itemp) = MAX(  1.5D0*Akt(i,j,  1,itemp)
+     &                             -0.5D0*Akt(i,j,  2,itemp), nuws )
          ENDDO
       ENDDO
       if ((istr.eq.1 .and. .not.WEST_INTER)) then
@@ -1053,6 +1071,7 @@
             trb(istr-1,j,k,nnew,itke)=trb(istr,j,k,nnew,itke)
             trb(istr-1,j,k,nnew,igls)=trb(istr,j,k,nnew,igls)
             Akv(istr-1,j,k      )=Akv(istr,j,k      )
+            Akt(istr-1,j,k,itemp)=Akt(istr,j,k,itemp)
           enddo
         enddo
       endif
@@ -1062,6 +1081,7 @@
             trb(iend+1,j,k,nnew,itke)=trb(iend,j,k,nnew,itke)
             trb(iend+1,j,k,nnew,igls)=trb(iend,j,k,nnew,igls)
             Akv(iend+1,j,k      )=Akv(iend,j,k      )
+            Akt(iend+1,j,k,itemp)=Akt(iend,j,k,itemp)
           enddo
         enddo
       endif
@@ -1089,6 +1109,8 @@
       call exchange_w3d_tile (Istr,Iend,Jstr,Jend,
      &                        trb(-2,-2,0,nnew,igls))
       call exchange_w3d_tile (Istr,Iend,Jstr,Jend, Akv)
+      call exchange_w3d_tile (Istr,Iend,Jstr,Jend,
+     &                        Akt(-2,-2,0,itemp))
       call exchange_w3d_tile (Istr,Iend,Jstr,Jend,
      &                        Lscale(-2,-2,0))
       return
